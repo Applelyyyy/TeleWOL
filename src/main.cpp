@@ -19,67 +19,74 @@
 #error "include/secrets.h not found. Run tools/generate_secrets.py first."
 #endif
 
-constexpr uint32_t WIFI_STARTUP_TIMEOUT_MS = 18000;
-constexpr uint32_t WIFI_RECONNECT_INTERVAL_MS = 5000;
-constexpr uint32_t BOT_POLL_INTERVAL_MS = 700;
-constexpr uint32_t SAFE_MODE_BOT_POLL_INTERVAL_MS = 5000;
-constexpr uint32_t TELEGRAM_FIRST_FAILURE_BACKOFF_MS = 2000;
-constexpr uint32_t TELEGRAM_CONTINUED_FAILURE_BACKOFF_MS = 5000;
-constexpr uint32_t BUTTON_DEBOUNCE_MS = 300;
-constexpr uint32_t WOL_COOLDOWN_MS = 3000;
-constexpr uint32_t WOL_REPEAT_INTERVAL_MS = 100;
-constexpr uint8_t WOL_REPEAT_COUNT = 5;
-constexpr uint16_t WOL_PORT = 9;
-constexpr uint32_t PING_TIMEOUT_MS = 600;
-constexpr uint32_t BOOT_HEALTHY_AFTER_MS = 60000;
-constexpr uint8_t SAFE_MODE_FAILURE_THRESHOLD = 3;
-constexpr uint32_t TASK_WATCHDOG_TIMEOUT_SECONDS = 15;
-constexpr uint32_t SLOW_LOOP_WARNING_MS = 250;
-constexpr uint32_t SLOW_OPERATION_WARNING_MS = 100;
-constexpr bool DEBUG_PERFORMANCE = true;
+#ifndef DEBUG_PERFORMANCE
+#define DEBUG_PERFORMANCE 0
+#endif
 
-const char BACK_KEYBOARD[] =
-    R"json([[{"text":"Back","callback_data":"refresh_menu"}]])json";
-const char WINDOWS_STATUS_KEYBOARD[] =
-    R"json([[{"text":"Refresh","callback_data":"refresh_status_win"}],[{"text":"Back","callback_data":"refresh_menu"}]])json";
-const char LINUX_STATUS_KEYBOARD[] =
-    R"json([[{"text":"Refresh","callback_data":"refresh_status_linux"}],[{"text":"Back","callback_data":"refresh_menu"}]])json";
-const char ALL_STATUS_KEYBOARD[] =
-    R"json([[{"text":"Refresh","callback_data":"refresh_status_all"}],[{"text":"Back","callback_data":"refresh_menu"}]])json";
-const char SAFE_MODE_KEYBOARD[] =
-    R"json([[{"text":"Refresh","callback_data":"esp_status"}]])json";
+namespace Timing {
+constexpr uint32_t kWifiStartupTimeoutMs = 18000;
+constexpr uint32_t kWifiRetryMs = 5000;
+constexpr uint32_t kTelegramPollMs = 700;
+constexpr uint32_t kSafeModeTelegramPollMs = 5000;
+constexpr uint32_t kTelegramFirstBackoffMs = 2000;
+constexpr uint32_t kTelegramContinuedBackoffMs = 5000;
+constexpr uint32_t kButtonDebounceMs = 300;
+constexpr uint32_t kStatusRefreshCooldownMs = 1000;
+constexpr uint32_t kWolCooldownMs = 3000;
+constexpr uint32_t kWolRepeatMs = 100;
+constexpr uint32_t kPingTimeoutMs = 600;
+constexpr uint32_t kBootHealthyMs = 60000;
+constexpr uint32_t kSlowLoopMs = 250;
+constexpr uint32_t kSlowOperationMs = 100;
+constexpr uint32_t kWatchdogSeconds = 15;
+constexpr uint32_t kTelegramClientTimeoutSeconds = 2;
+constexpr uint32_t kTelegramHandshakeTimeoutSeconds = 3;
+constexpr uint32_t kTelegramResponseWaitMs = 1200;
+constexpr uint32_t kStartupPollMs = 100;
+}  // namespace Timing
 
+namespace Limits {
+constexpr size_t kTargetCount = 2;
+constexpr uint8_t kWolPacketCount = 5;
+constexpr uint16_t kWolPort = 9;
+constexpr uint8_t kSafeModeBootCount = 3;
+constexpr size_t kTelegramPayloadBytes = 2304;
+constexpr size_t kTelegramResponseBytes = 4096;
+constexpr int kTelegramMessageBytes = 3000;
+}  // namespace Limits
+
+namespace Callback {
+constexpr char kMain[] = "refresh_menu";
+constexpr char kEspStatus[] = "esp_status";
+constexpr char kAutoWake[] = "auto_wake_status";
+constexpr char kStatusAll[] = "status_all";
+constexpr char kRefreshAll[] = "refresh_status_all";
+constexpr char kWakeWindows[] = "wake_win";
+constexpr char kWakeLinux[] = "wake_linux";
+constexpr char kStatusWindows[] = "status_win";
+constexpr char kStatusLinux[] = "status_linux";
+constexpr char kRefreshWindows[] = "refresh_status_win";
+constexpr char kRefreshLinux[] = "refresh_status_linux";
+}  // namespace Callback
+
+namespace Command {
+constexpr char kStart[] = "/start";
+constexpr char kHelp[] = "/help";
+constexpr char kEspStatus[] = "/status";
+constexpr char kAutoWake[] = "/auto_wake";
+constexpr char kStatusAll[] = "/status_all";
+constexpr char kWakeWindows[] = "/wake_win";
+constexpr char kWakeLinux[] = "/wake_linux";
+constexpr char kStatusWindows[] = "/status_win";
+constexpr char kStatusLinux[] = "/status_linux";
+}  // namespace Command
+
+namespace Diagnostics {
+constexpr bool kPerformance = DEBUG_PERFORMANCE != 0;
+}  // namespace Diagnostics
+
+enum class TargetId : uint8_t { kWindows, kLinux, kNone = UINT8_MAX };
 enum class TargetState : uint8_t { kNotConfigured, kUnknown, kOnline, kOffline };
-enum class ApplicationState : uint8_t {
-  kBooting,
-  kWaitingForWiFi,
-  kOnline,
-  kOtaUpdating,
-  kSafeMode,
-};
-enum class UiScreen : uint8_t {
-  kMain,
-  kWindowsStatus,
-  kLinuxStatus,
-  kAllStatus,
-  kEspStatus,
-  kAutoWakeStatus,
-  kActionResult,
-  kSafeMode,
-};
-enum class PendingAction : uint8_t {
-  kNone,
-  kCheckWindows,
-  kCheckLinux,
-  kCheckAllWindows,
-  kCheckAllLinux,
-  kWakeWindows,
-  kWakeLinux,
-  kAutoCheckWindows,
-  kAutoCheckLinux,
-  kAutoWakeWindows,
-  kAutoWakeLinux,
-};
 enum class AutoWakeResult : uint8_t {
   kPending,
   kDisabled,
@@ -89,6 +96,33 @@ enum class AutoWakeResult : uint8_t {
   kWakeSent,
   kWakeFailed,
 };
+enum class ApplicationState : uint8_t {
+  kBooting,
+  kWaitingForWiFi,
+  kOnline,
+  kOtaUpdating,
+  kSafeMode,
+};
+enum class Screen : uint8_t {
+  kMain,
+  kTargetStatus,
+  kAllStatus,
+  kEspStatus,
+  kAutoWake,
+  kActionResult,
+  kSafeMode,
+};
+enum class Action : uint8_t {
+  kNone,
+  kMain,
+  kEspStatus,
+  kAutoWake,
+  kTargetStatus,
+  kAllStatus,
+  kWakeTarget,
+  kUnknown,
+};
+enum class StatusJobType : uint8_t { kNone, kTarget, kAll };
 enum class TelegramResultKind : uint8_t {
   kSuccess,
   kNotModified,
@@ -97,11 +131,42 @@ enum class TelegramResultKind : uint8_t {
   kParseError,
 };
 
-struct TargetRuntimeStatus {
-  TargetState state = TargetState::kUnknown;
+struct TargetConfig {
+  const char* name;
+  const char* macText;
+  const char* ipText;
+  bool autoWake;
+  const char* wakeCallback;
+  const char* statusCallback;
+  const char* refreshCallback;
+  const char* wakeCommand;
+  const char* statusCommand;
+};
+
+struct TargetRuntime {
+  bool configured = false;
+  IPAddress ip;
+  uint8_t mac[6]{};
+  TargetState state = TargetState::kNotConfigured;
+  AutoWakeResult autoWakeResult = AutoWakeResult::kNotConfigured;
   float responseTimeMs = 0.0F;
   uint32_t lastCheckMs = 0;
   uint32_t lastSuccessfulCheckMs = 0;
+  uint32_t lastWakeMs = 0;
+};
+
+struct Target {
+  TargetConfig config;
+  TargetRuntime runtime;
+};
+
+struct ParsedAction {
+  Action action;
+  TargetId target;
+
+  ParsedAction(Action actionValue = Action::kNone,
+               TargetId targetValue = TargetId::kNone)
+      : action(actionValue), target(targetValue) {}
 };
 
 struct TelegramUpdate {
@@ -118,171 +183,230 @@ struct TelegramResult {
   int messageId = 0;
 };
 
-WiFiClientSecure client;
-UniversalTelegramBot bot(TELEGRAM_BOT_TOKEN, client);
+struct NetworkRuntime {
+  bool wasConnected = false;
+  bool connectedBefore = false;
+  uint32_t lastRetryMs = 0;
+  IPAddress broadcast;
+};
+
+struct TelegramRuntime {
+  bool initialized = false;
+  bool reachable = false;
+  bool backoffActive = false;
+  uint8_t failureCount = 0;
+  uint32_t lastPollMs = 0;
+  uint32_t lastFailureMs = 0;
+  uint32_t retryDelayMs = 0;
+  int32_t lastUpdateId = 0;
+  int dashboardMessageId = 0;
+  String dashboardChatId;
+  String lastDashboardText;
+  String lastDashboardKeyboard;
+  String lastCallbackQueryId;
+  String pollCommand;
+  TelegramUpdate update;
+};
+
+struct UiRuntime {
+  Screen screen = Screen::kMain;
+  TargetId target = TargetId::kNone;
+  bool updatePending = false;
+  bool fallbackAllowed = false;
+  String actionResult;
+  String mainKeyboard;
+  String backKeyboard;
+  String allStatusKeyboard;
+  String safeModeKeyboard;
+  String targetStatusKeyboards[Limits::kTargetCount];
+};
+
+struct StatusJob {
+  StatusJobType type = StatusJobType::kNone;
+  TargetId target = TargetId::kNone;
+  uint8_t nextTargetIndex = 0;
+};
+
+struct WolJob {
+  bool active = false;
+  bool automatic = false;
+  bool anyPacketSent = false;
+  TargetId target = TargetId::kNone;
+  uint8_t packetsSent = 0;
+  uint32_t lastSendMs = 0;
+};
+
+struct AutoWakeJob {
+  bool pending = false;
+  bool active = false;
+  bool handled = false;
+  uint8_t nextTargetIndex = 0;
+  uint32_t startedMs = 0;
+};
+
+struct ActionRuntime {
+  StatusJob status;
+  WolJob wol;
+  AutoWakeJob autoWake;
+  ParsedAction lastButton;
+  uint32_t lastButtonMs = 0;
+  uint32_t lastStatusRequestMs = 0;
+};
+
+struct OtaRuntime {
+  bool initialized = false;
+  bool inProgress = false;
+  uint8_t lastProgress = UINT8_MAX;
+};
+
+struct HealthRuntime {
+  bool safeMode = false;
+  bool bootMarkedHealthy = false;
+  bool watchdogEnabled = false;
+  uint32_t bootStartedMs = 0;
+  esp_reset_reason_t resetReason = ESP_RST_UNKNOWN;
+  ApplicationState applicationState = ApplicationState::kBooting;
+};
+
+struct PerformanceRuntime {
+  uint32_t lastLoopMs = 0;
+  uint32_t maximumLoopMs = 0;
+};
+
+Target targets[Limits::kTargetCount] = {
+    {{"Windows", WINDOWS_MAC, WINDOWS_IP, AUTO_WAKE_WINDOWS,
+      Callback::kWakeWindows, Callback::kStatusWindows,
+      Callback::kRefreshWindows, Command::kWakeWindows,
+      Command::kStatusWindows}, {}},
+    {{"Linux", LINUX_MAC, LINUX_IP, AUTO_WAKE_LINUX,
+      Callback::kWakeLinux, Callback::kStatusLinux,
+      Callback::kRefreshLinux, Command::kWakeLinux,
+      Command::kStatusLinux}, {}},
+};
+
+WiFiClientSecure telegramClient;
+UniversalTelegramBot bot(TELEGRAM_BOT_TOKEN, telegramClient);
 WiFiUDP udp;
-Preferences recoveryPreferences;
+Preferences preferences;
+DynamicJsonDocument telegramPayload(Limits::kTelegramPayloadBytes);
+DynamicJsonDocument telegramResponse(Limits::kTelegramResponseBytes);
+DynamicJsonDocument telegramUpdateDocument(Limits::kTelegramResponseBytes);
 
-TargetRuntimeStatus windowsStatus;
-TargetRuntimeStatus linuxStatus;
-ApplicationState applicationState = ApplicationState::kBooting;
-UiScreen currentScreen = UiScreen::kMain;
-PendingAction pendingAction = PendingAction::kNone;
-AutoWakeResult autoWindowsResult = AutoWakeResult::kPending;
-AutoWakeResult autoLinuxResult = AutoWakeResult::kPending;
+NetworkRuntime network;
+TelegramRuntime telegram;
+UiRuntime ui;
+ActionRuntime actions;
+OtaRuntime ota;
+HealthRuntime health;
+PerformanceRuntime performance;
 
-bool otaInitialized = false;
-bool telegramInitialized = false;
-bool telegramReachable = false;
-bool wifiWasConnected = false;
-bool hasConnectedBefore = false;
-bool autoWakePending = false;
-bool autoWakeHandled = false;
-bool autoWakeWorkflowActive = false;
-bool otaInProgress = false;
-bool safeMode = false;
-bool bootMarkedHealthy = false;
-bool watchdogEnabled = false;
-bool dashboardUpdatePending = false;
-bool dashboardFallbackAllowed = false;
-bool wolAnyPacketSent = false;
-
-uint8_t telegramFailureCount = 0;
-uint8_t wolPacketsSent = 0;
-uint8_t lastOtaProgress = 255;
-uint32_t autoWakeStartedAt = 0;
-uint32_t bootStartedAt = 0;
-uint32_t lastWiFiReconnectAttempt = 0;
-uint32_t nextTelegramPollAt = 0;
-uint32_t telegramRequestNotBefore = 0;
-uint32_t lastWindowsWakeMs = 0;
-uint32_t lastLinuxWakeMs = 0;
-uint32_t nextWolPacketAt = 0;
-uint32_t lastButtonAt = 0;
-uint32_t lastLoopDurationMs = 0;
-uint32_t maximumLoopDurationMs = 0;
-int32_t lastTelegramUpdateId = 0;
-int dashboardMessageId = 0;
-esp_reset_reason_t lastResetReason = ESP_RST_UNKNOWN;
-IPAddress wolBroadcastAddress;
-
-String dashboardChatId;
-String lastDashboardText;
-String lastDashboardKeyboard;
-String actionResultText;
-String lastCallbackQueryId;
-String lastButtonAction;
-String mainKeyboard;
-String backKeyboard;
-String windowsStatusKeyboard;
-String linuxStatusKeyboard;
-String allStatusKeyboard;
-String safeModeKeyboard;
-DynamicJsonDocument telegramPayloadDocument(2304);
-DynamicJsonDocument telegramResponseDocument(4096);
-DynamicJsonDocument telegramUpdateDocument(4096);
-
-bool timeReached(uint32_t now, uint32_t deadline) {
-  return static_cast<int32_t>(now - deadline) >= 0;
+Target* findTarget(TargetId id) {
+  const uint8_t index = static_cast<uint8_t>(id);
+  return index < Limits::kTargetCount ? &targets[index] : nullptr;
 }
 
-void logOperationDuration(const char* operation, uint32_t startedAt) {
-  if (!DEBUG_PERFORMANCE) return;
-  const uint32_t duration = millis() - startedAt;
-  if (duration >= SLOW_OPERATION_WARNING_MS) {
-    Serial.printf("[PERF] %s: %lu ms\n", operation,
-                  static_cast<unsigned long>(duration));
-  }
+TargetId targetIdAt(size_t index) {
+  return index < Limits::kTargetCount ? static_cast<TargetId>(index)
+                                      : TargetId::kNone;
 }
 
-void finishLoopTiming(uint32_t startedAt) {
-  lastLoopDurationMs = millis() - startedAt;
-  if (lastLoopDurationMs > maximumLoopDurationMs) {
-    maximumLoopDurationMs = lastLoopDurationMs;
-  }
-  if (DEBUG_PERFORMANCE && lastLoopDurationMs >= SLOW_LOOP_WARNING_MS) {
-    Serial.printf("[WARN] Slow loop: %lu ms\n",
-                  static_cast<unsigned long>(lastLoopDurationMs));
-  }
+bool sameAction(const ParsedAction& left, const ParsedAction& right) {
+  return left.action == right.action && left.target == right.target;
 }
 
-bool isWindowsConfigured() {
-  return WINDOWS_MAC[0] != '\0' && WINDOWS_IP[0] != '\0';
+bool isStatusAction(Action action) {
+  return action == Action::kTargetStatus || action == Action::kAllStatus;
 }
 
-bool isLinuxConfigured() {
-  return LINUX_MAC[0] != '\0' && LINUX_IP[0] != '\0';
-}
-
-bool isAuthorized(const String& chatId) {
-  return chatId == TELEGRAM_CHAT_ID;
-}
-
-bool isHeavyAction(const String& action) {
-  return action == "wake_win" || action == "wake_linux" ||
-         action == "status_win" || action == "refresh_status_win" ||
-         action == "status_linux" || action == "refresh_status_linux" ||
-         action == "status_all" || action == "refresh_status_all";
+bool isNetworkAction(Action action) {
+  return isStatusAction(action) || action == Action::kWakeTarget;
 }
 
 bool actionBusy() {
-  return pendingAction != PendingAction::kNone;
+  return actions.status.type != StatusJobType::kNone || actions.wol.active ||
+         actions.autoWake.active;
 }
 
-void feedTaskWatchdog() {
-  if (watchdogEnabled) esp_task_wdt_reset();
+bool telegramRequestAllowed(uint32_t now) {
+  return !telegram.backoffActive ||
+         now - telegram.lastFailureMs >= telegram.retryDelayMs;
 }
 
-String getResetReasonText() {
-  switch (lastResetReason) {
-    case ESP_RST_POWERON: return "Power-on";
-    case ESP_RST_EXT: return "External reset";
-    case ESP_RST_SW: return "Software reset";
-    case ESP_RST_PANIC: return "Crash / panic";
-    case ESP_RST_INT_WDT: return "Interrupt Watchdog";
-    case ESP_RST_TASK_WDT: return "Task Watchdog";
-    case ESP_RST_WDT: return "Watchdog";
-    case ESP_RST_DEEPSLEEP: return "Deep sleep";
-    case ESP_RST_BROWNOUT: return "Brownout";
-    case ESP_RST_SDIO: return "SDIO reset";
-    default: return "Unknown";
+void feedWatchdog() {
+  if (health.watchdogEnabled) esp_task_wdt_reset();
+}
+
+void logOperationDuration(const char* operation, uint32_t startedMs) {
+  if (!Diagnostics::kPerformance) return;
+  const uint32_t durationMs = millis() - startedMs;
+  if (durationMs >= Timing::kSlowOperationMs) {
+    Serial.printf("[PERF] %s: %lu ms\n", operation,
+                  static_cast<unsigned long>(durationMs));
   }
 }
 
-String getApplicationStateText() {
-  switch (applicationState) {
-    case ApplicationState::kBooting: return "BOOTING";
-    case ApplicationState::kWaitingForWiFi: return "WAITING_FOR_WIFI";
-    case ApplicationState::kOnline: return "ONLINE";
-    case ApplicationState::kOtaUpdating: return "OTA_UPDATING";
-    case ApplicationState::kSafeMode: return "SAFE_MODE";
-    default: return "UNKNOWN";
+void finishLoopTiming(uint32_t startedMs) {
+  performance.lastLoopMs = millis() - startedMs;
+  if (performance.lastLoopMs > performance.maximumLoopMs) {
+    performance.maximumLoopMs = performance.lastLoopMs;
+  }
+  if (Diagnostics::kPerformance &&
+      performance.lastLoopMs >= Timing::kSlowLoopMs) {
+    Serial.printf("[WARN] Slow loop: %lu ms\n",
+                  static_cast<unsigned long>(performance.lastLoopMs));
   }
 }
 
-String getTargetStateText(TargetState state) {
+String resetReasonText() {
+  switch (health.resetReason) {
+    case ESP_RST_POWERON: return F("Power-on");
+    case ESP_RST_EXT: return F("External reset");
+    case ESP_RST_SW: return F("Software reset");
+    case ESP_RST_PANIC: return F("Crash / panic");
+    case ESP_RST_INT_WDT: return F("Interrupt Watchdog");
+    case ESP_RST_TASK_WDT: return F("Task Watchdog");
+    case ESP_RST_WDT: return F("Watchdog");
+    case ESP_RST_DEEPSLEEP: return F("Deep sleep");
+    case ESP_RST_BROWNOUT: return F("Brownout");
+    case ESP_RST_SDIO: return F("SDIO reset");
+    default: return F("Unknown");
+  }
+}
+
+String applicationStateText() {
+  switch (health.applicationState) {
+    case ApplicationState::kBooting: return F("BOOTING");
+    case ApplicationState::kWaitingForWiFi: return F("WAITING_FOR_WIFI");
+    case ApplicationState::kOnline: return F("ONLINE");
+    case ApplicationState::kOtaUpdating: return F("OTA_UPDATING");
+    case ApplicationState::kSafeMode: return F("SAFE_MODE");
+    default: return F("UNKNOWN");
+  }
+}
+
+const __FlashStringHelper* targetStateText(TargetState state) {
   switch (state) {
-    case TargetState::kOnline: return "Online";
-    case TargetState::kOffline: return "Offline";
-    case TargetState::kNotConfigured: return "Not configured";
-    default: return "Unknown";
+    case TargetState::kOnline: return F("Online");
+    case TargetState::kOffline: return F("Offline");
+    case TargetState::kNotConfigured: return F("Not configured");
+    default: return F("Unknown");
   }
 }
 
-String getAutoWakeResultText(AutoWakeResult result) {
+const __FlashStringHelper* autoWakeResultText(AutoWakeResult result) {
   switch (result) {
-    case AutoWakeResult::kDisabled: return "Disabled";
-    case AutoWakeResult::kNotConfigured: return "Not configured";
-    case AutoWakeResult::kSkippedReset: return "Skipped for this reset";
-    case AutoWakeResult::kAlreadyOnline: return "Already online; WOL skipped";
-    case AutoWakeResult::kWakeSent: return "Wake packets sent";
-    case AutoWakeResult::kWakeFailed: return "Wake packet failed";
-    default: return "Waiting";
+    case AutoWakeResult::kDisabled: return F("Disabled");
+    case AutoWakeResult::kNotConfigured: return F("Not configured");
+    case AutoWakeResult::kSkippedReset: return F("Skipped for this reset");
+    case AutoWakeResult::kAlreadyOnline: return F("Already online; WOL skipped");
+    case AutoWakeResult::kWakeSent: return F("Wake packets sent");
+    case AutoWakeResult::kWakeFailed: return F("Wake packet failed");
+    default: return F("Waiting");
   }
 }
 
-String getFormattedUptime() {
-  uint32_t totalSeconds = millis() / 1000U;
+String formattedUptime(uint32_t now) {
+  uint32_t totalSeconds = now / 1000U;
   const uint32_t days = totalSeconds / 86400U;
   totalSeconds %= 86400U;
   const uint32_t hours = totalSeconds / 3600U;
@@ -292,397 +416,25 @@ String getFormattedUptime() {
   char buffer[32];
   snprintf(buffer, sizeof(buffer), "%lud %luh %lum %lus",
            static_cast<unsigned long>(days), static_cast<unsigned long>(hours),
-           static_cast<unsigned long>(minutes), static_cast<unsigned long>(seconds));
+           static_cast<unsigned long>(minutes),
+           static_cast<unsigned long>(seconds));
   return String(buffer);
 }
 
-String getAgeText(uint32_t timestamp) {
-  if (timestamp == 0) return "never";
-  const uint32_t ageSeconds = (millis() - timestamp) / 1000U;
-  if (ageSeconds < 2) return "just now";
-  if (ageSeconds < 60) return String(ageSeconds) + "s ago";
-  if (ageSeconds < 3600) return String(ageSeconds / 60U) + "m ago";
-  return String(ageSeconds / 3600U) + "h ago";
+String ageText(uint32_t timestamp, uint32_t now) {
+  if (timestamp == 0) return F("never");
+  const uint32_t ageSeconds = (now - timestamp) / 1000U;
+  if (ageSeconds < 2) return F("just now");
+  if (ageSeconds < 60) return String(ageSeconds) + F("s ago");
+  if (ageSeconds < 3600) return String(ageSeconds / 60U) + F("m ago");
+  return String(ageSeconds / 3600U) + F("h ago");
 }
 
-String getSignalQuality(int rssi) {
-  if (rssi >= -50) return "Excellent";
-  if (rssi >= -60) return "Good";
-  if (rssi >= -70) return "Fair";
-  return "Weak";
-}
-
-void buildKeyboardCache() {
-  backKeyboard = BACK_KEYBOARD;
-  windowsStatusKeyboard = WINDOWS_STATUS_KEYBOARD;
-  linuxStatusKeyboard = LINUX_STATUS_KEYBOARD;
-  allStatusKeyboard = ALL_STATUS_KEYBOARD;
-  safeModeKeyboard = SAFE_MODE_KEYBOARD;
-
-  DynamicJsonDocument document(768);
-  JsonArray keyboard = document.to<JsonArray>();
-  auto addButton = [](JsonArray row, const char* text, const char* data) {
-    JsonObject button = row.createNestedObject();
-    button["text"] = text;
-    button["callback_data"] = data;
-  };
-
-  if (isWindowsConfigured() || isLinuxConfigured()) {
-    JsonArray wakeRow = keyboard.createNestedArray();
-    if (isWindowsConfigured()) addButton(wakeRow, "Wake Windows", "wake_win");
-    if (isLinuxConfigured()) addButton(wakeRow, "Wake Linux", "wake_linux");
-    JsonArray statusRow = keyboard.createNestedArray();
-    if (isWindowsConfigured()) addButton(statusRow, "Status Windows", "status_win");
-    if (isLinuxConfigured()) addButton(statusRow, "Status Linux", "status_linux");
-    if (isWindowsConfigured() && isLinuxConfigured()) {
-      JsonArray allRow = keyboard.createNestedArray();
-      addButton(allRow, "Status All", "status_all");
-    }
-  }
-  JsonArray autoRow = keyboard.createNestedArray();
-  addButton(autoRow, "Auto Wake", "auto_wake_status");
-  JsonArray espRow = keyboard.createNestedArray();
-  addButton(espRow, "ESP32 Status", "esp_status");
-
-  mainKeyboard.reserve(700);
-  serializeJson(document, mainKeyboard);
-}
-
-uint32_t latestCheckTime() {
-  return windowsStatus.lastCheckMs > linuxStatus.lastCheckMs
-             ? windowsStatus.lastCheckMs
-             : linuxStatus.lastCheckMs;
-}
-
-String buildMainDashboard() {
-  String message;
-  message.reserve(320);
-  message += "TeleWOL\n\n";
-  if (isWindowsConfigured()) {
-    message += "Windows: ";
-    message += getTargetStateText(windowsStatus.state);
-    message += '\n';
-  }
-  if (isLinuxConfigured()) {
-    message += "Linux: ";
-    message += getTargetStateText(linuxStatus.state);
-    message += '\n';
-  }
-  message += "\nLast status check: ";
-  message += getAgeText(latestCheckTime());
-  message += "\n\nESP32: Online\nWi-Fi: ";
-  message += String(WiFi.RSSI());
-  message += " dBm";
-  return message;
-}
-
-String buildTargetStatusScreen(const char* label, const char* ipAddress,
-                               const TargetRuntimeStatus& status) {
-  String message;
-  message.reserve(280);
-  message += label;
-  message += " Status\n\nStatus: ";
-  message += getTargetStateText(status.state);
-  if (status.state != TargetState::kNotConfigured) {
-    message += "\nIP: ";
-    message += ipAddress;
-  }
-  if (status.state == TargetState::kOnline) {
-    message += "\nPing: ";
-    message += String(status.responseTimeMs, 1);
-    message += " ms";
-  } else if (status.state == TargetState::kOffline) {
-    message += " / Unreachable";
-  } else if (status.state == TargetState::kUnknown) {
-    message += "\nThe check could not be completed.";
-  }
-  message += "\n\nLast check: ";
-  message += getAgeText(status.lastCheckMs);
-  message += "\nLast successful reply: ";
-  message += getAgeText(status.lastSuccessfulCheckMs);
-  return message;
-}
-
-String buildWindowsStatusScreen() {
-  return buildTargetStatusScreen("Windows", WINDOWS_IP, windowsStatus);
-}
-
-String buildLinuxStatusScreen() {
-  return buildTargetStatusScreen("Linux", LINUX_IP, linuxStatus);
-}
-
-String buildAllStatusScreen() {
-  String message;
-  message.reserve(320);
-  message += "PC Status\n\n";
-  if (isWindowsConfigured()) {
-    message += "Windows: ";
-    message += getTargetStateText(windowsStatus.state);
-    message += '\n';
-  }
-  if (isLinuxConfigured()) {
-    message += "Linux: ";
-    message += getTargetStateText(linuxStatus.state);
-    message += '\n';
-  }
-  message += "\nLast check: ";
-  message += getAgeText(latestCheckTime());
-  return message;
-}
-
-String buildEspStatusScreen() {
-  String message;
-  message.reserve(700);
-  message += "ESP32 Status\n\nState: ";
-  message += getApplicationStateText();
-  message += "\nLast Reset: ";
-  message += getResetReasonText();
-  message += "\nWatchdog: ";
-  message += watchdogEnabled ? "Enabled" : "Unavailable";
-  message += "\nSafe Mode: ";
-  message += safeMode ? "Yes" : "No";
-  message += "\nWi-Fi: ";
-  message += WiFi.status() == WL_CONNECTED ? "Connected" : "Disconnected";
-  message += "\nTelegram: ";
-  message += telegramReachable ? "Reachable" : "Temporarily unavailable";
-  if (WiFi.status() == WL_CONNECTED) {
-    message += "\nSSID: ";
-    message += WiFi.SSID();
-    message += "\nIP: ";
-    message += WiFi.localIP().toString();
-    const int rssi = WiFi.RSSI();
-    message += "\nRSSI: ";
-    message += String(rssi);
-    message += " dBm (";
-    message += getSignalQuality(rssi);
-    message += ")\nGateway: ";
-    message += WiFi.gatewayIP().toString();
-    message += "\nSubnet: ";
-    message += WiFi.subnetMask().toString();
-  }
-  message += "\nUptime: ";
-  message += getFormattedUptime();
-  message += "\n\nMemory\nFree Heap: ";
-  message += String(ESP.getFreeHeap() / 1024U);
-  message += " KB\nMin Free Heap: ";
-  message += String(ESP.getMinFreeHeap() / 1024U);
-  message += " KB\nLargest Block: ";
-  message += String(ESP.getMaxAllocHeap() / 1024U);
-  message += " KB\n\nPerformance\nLast loop: ";
-  message += String(lastLoopDurationMs);
-  message += " ms\nMaximum loop: ";
-  message += String(maximumLoopDurationMs);
-  message += " ms";
-  return message;
-}
-
-String buildAutoWakeScreen() {
-  String message;
-  message.reserve(420);
-  message += "Auto Wake\n\nWindows: ";
-  if (!isWindowsConfigured()) message += "Not configured";
-  else message += AUTO_WAKE_WINDOWS ? "Enabled" : "Disabled";
-  message += "\nLinux: ";
-  if (!isLinuxConfigured()) message += "Not configured";
-  else message += AUTO_WAKE_LINUX ? "Enabled" : "Disabled";
-  message += "\nDelay: ";
-  message += String(AUTO_WAKE_DELAY_SECONDS);
-  message += " seconds\n\nLast startup workflow\nWindows: ";
-  message += getAutoWakeResultText(autoWindowsResult);
-  message += "\nLinux: ";
-  message += getAutoWakeResultText(autoLinuxResult);
-  return message;
-}
-
-String buildSafeModeScreen() {
-  String message;
-  message.reserve(350);
-  message += "TeleWOL SAFE MODE\n\nRepeated unhealthy boots were detected.\n\nWi-Fi: ";
-  message += WiFi.status() == WL_CONNECTED ? "Connected" : "Disconnected";
-  message += "\nOTA: ";
-  message += otaInitialized ? "Ready" : "Waiting for Wi-Fi";
-  message += "\nReset reason: ";
-  message += getResetReasonText();
-  message += "\n\nUpload corrected firmware using ArduinoOTA or USB.";
-  return message;
-}
-
-String renderCurrentScreen() {
-  switch (currentScreen) {
-    case UiScreen::kWindowsStatus: return buildWindowsStatusScreen();
-    case UiScreen::kLinuxStatus: return buildLinuxStatusScreen();
-    case UiScreen::kAllStatus: return buildAllStatusScreen();
-    case UiScreen::kEspStatus: return buildEspStatusScreen();
-    case UiScreen::kAutoWakeStatus: return buildAutoWakeScreen();
-    case UiScreen::kActionResult: return actionResultText;
-    case UiScreen::kSafeMode: return buildSafeModeScreen();
-    default: return buildMainDashboard();
-  }
-}
-
-const String& keyboardForCurrentScreen() {
-  switch (currentScreen) {
-    case UiScreen::kWindowsStatus: return windowsStatusKeyboard;
-    case UiScreen::kLinuxStatus: return linuxStatusKeyboard;
-    case UiScreen::kAllStatus: return allStatusKeyboard;
-    case UiScreen::kSafeMode: return safeModeKeyboard;
-    case UiScreen::kMain: return mainKeyboard;
-    default: return backKeyboard;
-  }
-}
-
-void queueScreen(UiScreen screen, bool allowFallback = true) {
-  currentScreen = screen;
-  dashboardUpdatePending = true;
-  dashboardFallbackAllowed = allowFallback;
-}
-
-void recordTelegramSuccess() {
-  telegramReachable = true;
-  telegramFailureCount = 0;
-  telegramRequestNotBefore = millis();
-}
-
-void recordTelegramFailure() {
-  telegramReachable = false;
-  if (telegramFailureCount < UINT8_MAX) ++telegramFailureCount;
-  const uint32_t waitMs = telegramFailureCount == 1
-                              ? TELEGRAM_FIRST_FAILURE_BACKOFF_MS
-                              : TELEGRAM_CONTINUED_FAILURE_BACKOFF_MS;
-  telegramRequestNotBefore = millis() + waitMs;
-  nextTelegramPollAt = telegramRequestNotBefore;
-  Serial.printf("Telegram unavailable; retrying in %lu ms\n",
-                static_cast<unsigned long>(waitMs));
-}
-
-TelegramResult telegramPost(const char* method, JsonObject payload,
-                            const char* timingLabel) {
-  const uint32_t startedAt = millis();
-  const String response = bot.sendPostToTelegram(bot.buildCommand(method), payload);
-  client.stop();
-  logOperationDuration(timingLabel, startedAt);
-
-  TelegramResult result;
-  if (response.length() == 0) {
-    result.kind = TelegramResultKind::kNetworkError;
-    recordTelegramFailure();
-    return result;
-  }
-
-  telegramResponseDocument.clear();
-  const DeserializationError error = deserializeJson(telegramResponseDocument, response);
-  if (error) {
-    result.kind = TelegramResultKind::kParseError;
-    recordTelegramFailure();
-    return result;
-  }
-
-  recordTelegramSuccess();
-  if (telegramResponseDocument["ok"] | false) {
-    result.kind = TelegramResultKind::kSuccess;
-    result.messageId = telegramResponseDocument["result"]["message_id"] | 0;
-    return result;
-  }
-
-  const String description = telegramResponseDocument["description"].as<String>();
-  result.kind = description.indexOf("message is not modified") >= 0
-                    ? TelegramResultKind::kNotModified
-                    : TelegramResultKind::kApiError;
-  return result;
-}
-
-TelegramResult sendOrEditDashboard(const String& text, const String& keyboard,
-                                   bool editExisting) {
-  telegramPayloadDocument.clear();
-  telegramPayloadDocument["chat_id"] = dashboardChatId;
-  telegramPayloadDocument["text"] = text;
-  if (editExisting) telegramPayloadDocument["message_id"] = dashboardMessageId;
-  JsonObject replyMarkup = telegramPayloadDocument.createNestedObject("reply_markup");
-  replyMarkup["inline_keyboard"] = serialized(keyboard);
-  return telegramPost(editExisting ? "editMessageText" : "sendMessage",
-                      telegramPayloadDocument.as<JsonObject>(),
-                      editExisting ? "Edit dashboard" : "Send dashboard");
-}
-
-void saveDashboardIdentity() {
-  recoveryPreferences.putInt("dashId", dashboardMessageId);
-  recoveryPreferences.putString("dashChat", dashboardChatId);
-}
-
-bool handleDashboardUpdate() {
-  if (!dashboardUpdatePending || otaInProgress || !telegramInitialized ||
-      !timeReached(millis(), telegramRequestNotBefore)) {
-    return false;
-  }
-  if (dashboardChatId.length() == 0) dashboardChatId = TELEGRAM_CHAT_ID;
-
-  const String text = renderCurrentScreen();
-  const String& keyboard = keyboardForCurrentScreen();
-  const bool editExisting = dashboardMessageId > 0;
-  if (editExisting && text == lastDashboardText && keyboard == lastDashboardKeyboard) {
-    dashboardUpdatePending = false;
-    return false;
-  }
-
-  const TelegramResult result = sendOrEditDashboard(text, keyboard, editExisting);
-  if (result.kind == TelegramResultKind::kSuccess ||
-      result.kind == TelegramResultKind::kNotModified) {
-    if (!editExisting && result.messageId > 0) {
-      dashboardMessageId = result.messageId;
-      saveDashboardIdentity();
-    }
-    lastDashboardText = text;
-    lastDashboardKeyboard = keyboard;
-    dashboardUpdatePending = false;
-  } else if (editExisting && result.kind == TelegramResultKind::kApiError &&
-             dashboardFallbackAllowed) {
-    // The old message was deleted/invalid. Send exactly one replacement next loop.
-    dashboardMessageId = 0;
-    dashboardFallbackAllowed = false;
-    lastDashboardText = "";
-    lastDashboardKeyboard = "";
-  } else {
-    dashboardUpdatePending = false;
-  }
-  return true;
-}
-
-void answerCallback(const String& queryId, const char* text = nullptr,
-                    bool showAlert = false) {
-  telegramPayloadDocument.clear();
-  telegramPayloadDocument["callback_query_id"] = queryId;
-  telegramPayloadDocument["show_alert"] = showAlert;
-  telegramPayloadDocument["cache_time"] = 0;
-  if (text != nullptr && text[0] != '\0') telegramPayloadDocument["text"] = text;
-  telegramPost("answerCallbackQuery", telegramPayloadDocument.as<JsonObject>(),
-               "Callback ACK");
-}
-
-void sendOneShotText(const String& chatId, const String& text) {
-  telegramPayloadDocument.clear();
-  telegramPayloadDocument["chat_id"] = chatId;
-  telegramPayloadDocument["text"] = text;
-  telegramPost("sendMessage", telegramPayloadDocument.as<JsonObject>(),
-               "Telegram send");
-}
-
-String normalizeCommand(String command) {
-  command.trim();
-  const int atSign = command.indexOf('@');
-  if (atSign >= 0) command.remove(atSign);
-  return command;
-}
-
-bool isMacAddressValid(const char* macAddress) {
-  if (macAddress == nullptr || strlen(macAddress) != 17) return false;
-  for (uint8_t i = 0; i < 17; ++i) {
-    if (i % 3 == 2) {
-      if (macAddress[i] != ':') return false;
-    } else if (!isxdigit(static_cast<unsigned char>(macAddress[i]))) {
-      return false;
-    }
-  }
-  return true;
+const __FlashStringHelper* signalQuality(int rssi) {
+  if (rssi >= -50) return F("Excellent");
+  if (rssi >= -60) return F("Good");
+  if (rssi >= -70) return F("Fair");
+  return F("Weak");
 }
 
 uint8_t hexValue(char value) {
@@ -691,199 +443,615 @@ uint8_t hexValue(char value) {
   return static_cast<uint8_t>(value - 'a' + 10);
 }
 
-bool sendOneMagicPacket(const char* macAddress) {
-  if (WiFi.status() != WL_CONNECTED || !isMacAddressValid(macAddress)) return false;
-
-  uint8_t mac[6];
-  for (uint8_t i = 0; i < 6; ++i) {
-    mac[i] = static_cast<uint8_t>((hexValue(macAddress[i * 3]) << 4U) |
-                                  hexValue(macAddress[i * 3 + 1]));
-  }
-  uint8_t packet[102];
-  memset(packet, 0xFF, 6);
-  for (uint8_t repeat = 0; repeat < 16; ++repeat) {
-    memcpy(packet + 6 + repeat * 6, mac, 6);
-  }
-
-  if (!udp.beginPacket(wolBroadcastAddress, WOL_PORT)) return false;
-  const size_t written = udp.write(packet, sizeof(packet));
-  return written == sizeof(packet) && udp.endPacket() == 1;
-}
-
-void configureWolBroadcast() {
-  const IPAddress local = WiFi.localIP();
-  const IPAddress mask = WiFi.subnetMask();
-  for (uint8_t i = 0; i < 4; ++i) {
-    wolBroadcastAddress[i] = local[i] | static_cast<uint8_t>(~mask[i]);
-  }
-  Serial.printf("WOL broadcast address: %s\n", wolBroadcastAddress.toString().c_str());
-}
-
-bool isWakeOnCooldown(uint32_t lastWakeMs) {
-  return lastWakeMs != 0 && millis() - lastWakeMs < WOL_COOLDOWN_MS;
-}
-
-void startWolSequence(PendingAction action) {
-  pendingAction = action;
-  wolPacketsSent = 0;
-  wolAnyPacketSent = false;
-  nextWolPacketAt = millis();
-}
-
-void setActionResult(const String& text) {
-  actionResultText = text;
-  queueScreen(UiScreen::kActionResult);
-}
-
-void scheduleManualAction(const String& action) {
-  if (actionBusy()) {
-    setActionResult("TeleWOL\n\nAnother network action is already running. Please wait.");
-    return;
-  }
-
-  if (action == "status_win" || action == "refresh_status_win") {
-    if (!isWindowsConfigured()) {
-      setActionResult("Windows target is not configured.");
-    } else {
-      pendingAction = PendingAction::kCheckWindows;
+bool parseMacAddress(const char* text, uint8_t (&mac)[6]) {
+  if (text == nullptr || strlen(text) != 17) return false;
+  for (uint8_t index = 0; index < 17; ++index) {
+    if (index % 3 == 2) {
+      if (text[index] != ':') return false;
+    } else if (!isxdigit(static_cast<unsigned char>(text[index]))) {
+      return false;
     }
-  } else if (action == "status_linux" || action == "refresh_status_linux") {
-    if (!isLinuxConfigured()) {
-      setActionResult("Linux target is not configured.");
-    } else {
-      pendingAction = PendingAction::kCheckLinux;
-    }
-  } else if (action == "status_all" || action == "refresh_status_all") {
-    if (isWindowsConfigured()) pendingAction = PendingAction::kCheckAllWindows;
-    else if (isLinuxConfigured()) pendingAction = PendingAction::kCheckAllLinux;
-    else setActionResult("No target machines are configured.");
-  } else if (action == "wake_win") {
-    if (!isWindowsConfigured()) {
-      setActionResult("Windows target is not configured.");
-    } else if (isWakeOnCooldown(lastWindowsWakeMs)) {
-      setActionResult("Wake Windows was requested recently. Please wait a moment.");
-    } else if (!isMacAddressValid(WINDOWS_MAC)) {
-      setActionResult("Wake-on-LAN failed: invalid Windows MAC address.");
-    } else {
-      lastWindowsWakeMs = millis();
-      startWolSequence(PendingAction::kWakeWindows);
-    }
-  } else if (action == "wake_linux") {
-    if (!isLinuxConfigured()) {
-      setActionResult("Linux target is not configured.");
-    } else if (isWakeOnCooldown(lastLinuxWakeMs)) {
-      setActionResult("Wake Linux was requested recently. Please wait a moment.");
-    } else if (!isMacAddressValid(LINUX_MAC)) {
-      setActionResult("Wake-on-LAN failed: invalid Linux MAC address.");
-    } else {
-      lastLinuxWakeMs = millis();
-      startWolSequence(PendingAction::kWakeLinux);
+  }
+  for (uint8_t index = 0; index < 6; ++index) {
+    mac[index] = static_cast<uint8_t>((hexValue(text[index * 3]) << 4U) |
+                                      hexValue(text[index * 3 + 1]));
+  }
+  return true;
+}
+
+void initializeTargets() {
+  for (Target& target : targets) {
+    const bool hasPair = target.config.macText[0] != '\0' &&
+                         target.config.ipText[0] != '\0';
+    target.runtime.configured = hasPair &&
+        target.runtime.ip.fromString(target.config.ipText) &&
+        parseMacAddress(target.config.macText, target.runtime.mac);
+    target.runtime.state = target.runtime.configured
+                               ? TargetState::kUnknown
+                               : TargetState::kNotConfigured;
+    target.runtime.autoWakeResult = !target.runtime.configured
+                                        ? AutoWakeResult::kNotConfigured
+                                        : target.config.autoWake
+                                              ? AutoWakeResult::kPending
+                                              : AutoWakeResult::kDisabled;
+    if (hasPair && !target.runtime.configured) {
+      Serial.printf("Invalid %s target configuration\n", target.config.name);
     }
   }
 }
 
-void routeLightAction(const String& action) {
-  if (action == "refresh_menu") queueScreen(UiScreen::kMain);
-  else if (action == "esp_status") queueScreen(safeMode ? UiScreen::kSafeMode : UiScreen::kEspStatus);
-  else if (action == "auto_wake_status") queueScreen(UiScreen::kAutoWakeStatus);
-  else queueScreen(UiScreen::kMain);
+void addKeyboardButton(JsonArray row, const char* text, const char* callback) {
+  JsonObject button = row.createNestedObject();
+  button["text"] = text;
+  button["callback_data"] = callback;
+}
+
+void buildKeyboardCache() {
+  auto buildNavigationKeyboard = [](String& output, const char* primaryLabel,
+                                    const char* primaryCallback, bool addBack) {
+    DynamicJsonDocument document(256);
+    JsonArray keyboard = document.to<JsonArray>();
+    JsonArray primaryRow = keyboard.createNestedArray();
+    addKeyboardButton(primaryRow, primaryLabel, primaryCallback);
+    if (addBack) {
+      JsonArray backRow = keyboard.createNestedArray();
+      addKeyboardButton(backRow, "Back", Callback::kMain);
+    }
+    output.reserve(192);
+    serializeJson(document, output);
+  };
+  buildNavigationKeyboard(ui.backKeyboard, "Back", Callback::kMain, false);
+  buildNavigationKeyboard(ui.allStatusKeyboard, "Refresh", Callback::kRefreshAll,
+                          true);
+  buildNavigationKeyboard(ui.safeModeKeyboard, "Refresh", Callback::kEspStatus,
+                          false);
+
+  DynamicJsonDocument keyboardDocument(768);
+  JsonArray keyboard = keyboardDocument.to<JsonArray>();
+  size_t configuredTargetCount = 0;
+  for (const Target& target : targets) {
+    if (target.runtime.configured) ++configuredTargetCount;
+  }
+  if (configuredTargetCount > 0) {
+    JsonArray wakeRow = keyboard.createNestedArray();
+    JsonArray statusRow = keyboard.createNestedArray();
+    for (const Target& target : targets) {
+      if (!target.runtime.configured) continue;
+      String wakeLabel = F("Wake ");
+      wakeLabel += target.config.name;
+      String statusLabel = F("Status ");
+      statusLabel += target.config.name;
+      addKeyboardButton(wakeRow, wakeLabel.c_str(), target.config.wakeCallback);
+      addKeyboardButton(statusRow, statusLabel.c_str(), target.config.statusCallback);
+    }
+  }
+  if (configuredTargetCount > 1) {
+    JsonArray allRow = keyboard.createNestedArray();
+    addKeyboardButton(allRow, "Status All", Callback::kStatusAll);
+  }
+  JsonArray autoRow = keyboard.createNestedArray();
+  addKeyboardButton(autoRow, "Auto Wake", Callback::kAutoWake);
+  JsonArray espRow = keyboard.createNestedArray();
+  addKeyboardButton(espRow, "ESP32 Status", Callback::kEspStatus);
+  ui.mainKeyboard.reserve(700);
+  serializeJson(keyboardDocument, ui.mainKeyboard);
+
+  for (size_t index = 0; index < Limits::kTargetCount; ++index) {
+    buildNavigationKeyboard(ui.targetStatusKeyboards[index], "Refresh",
+                            targets[index].config.refreshCallback, true);
+  }
+}
+
+uint32_t latestCheckTime() {
+  uint32_t latest = 0;
+  for (const Target& target : targets) {
+    if (target.runtime.lastCheckMs > latest) latest = target.runtime.lastCheckMs;
+  }
+  return latest;
+}
+
+String buildMainDashboard(uint32_t now) {
+  String message;
+  message.reserve(320);
+  message += F("TeleWOL\n\n");
+  for (const Target& target : targets) {
+    if (!target.runtime.configured) continue;
+    message += target.config.name;
+    message += F(": ");
+    message += targetStateText(target.runtime.state);
+    message += '\n';
+  }
+  message += F("\nLast status check: ");
+  message += ageText(latestCheckTime(), now);
+  message += F("\n\nESP32: Online\nWi-Fi: ");
+  message += String(WiFi.RSSI());
+  message += F(" dBm");
+  return message;
+}
+
+String buildTargetStatusScreen(const Target& target, uint32_t now) {
+  String message;
+  message.reserve(280);
+  message += target.config.name;
+  message += F(" Status\n\nStatus: ");
+  message += targetStateText(target.runtime.state);
+  if (target.runtime.configured) {
+    message += F("\nIP: ");
+    message += target.runtime.ip.toString();
+  }
+  if (target.runtime.state == TargetState::kOnline) {
+    message += F("\nPing: ");
+    message += String(target.runtime.responseTimeMs, 1);
+    message += F(" ms");
+  } else if (target.runtime.state == TargetState::kOffline) {
+    message += F(" / Unreachable");
+  } else if (target.runtime.state == TargetState::kUnknown) {
+    message += F("\nCheck could not complete.");
+  }
+  message += F("\n\nLast check: ");
+  message += ageText(target.runtime.lastCheckMs, now);
+  message += F("\nLast successful reply: ");
+  message += ageText(target.runtime.lastSuccessfulCheckMs, now);
+  return message;
+}
+
+String buildAllStatusScreen(uint32_t now) {
+  String message;
+  message.reserve(320);
+  message += F("PC Status\n\n");
+  for (const Target& target : targets) {
+    if (!target.runtime.configured) continue;
+    message += target.config.name;
+    message += F(": ");
+    message += targetStateText(target.runtime.state);
+    message += '\n';
+  }
+  message += F("\nLast check: ");
+  message += ageText(latestCheckTime(), now);
+  return message;
+}
+
+String buildEspStatusScreen(uint32_t now) {
+  String message;
+  message.reserve(700);
+  message += F("ESP32 Status\n\nState: ");
+  message += applicationStateText();
+  message += F("\nLast Reset: ");
+  message += resetReasonText();
+  message += F("\nWatchdog: ");
+  message += health.watchdogEnabled ? F("Enabled") : F("Unavailable");
+  message += F("\nSafe Mode: ");
+  message += health.safeMode ? F("Yes") : F("No");
+  message += F("\nWi-Fi: ");
+  message += WiFi.status() == WL_CONNECTED ? F("Connected") : F("Disconnected");
+  message += F("\nTelegram: ");
+  message += telegram.reachable ? F("Reachable") : F("Temporarily unavailable");
+  if (WiFi.status() == WL_CONNECTED) {
+    const int rssi = WiFi.RSSI();
+    message += F("\nSSID: ");
+    message += WiFi.SSID();
+    message += F("\nIP: ");
+    message += WiFi.localIP().toString();
+    message += F("\nRSSI: ");
+    message += String(rssi);
+    message += F(" dBm (");
+    message += signalQuality(rssi);
+    message += F(")\nGateway: ");
+    message += WiFi.gatewayIP().toString();
+    message += F("\nSubnet: ");
+    message += WiFi.subnetMask().toString();
+  }
+  message += F("\nUptime: ");
+  message += formattedUptime(now);
+  message += F("\n\nMemory\nFree Heap: ");
+  message += String(ESP.getFreeHeap() / 1024U);
+  message += F(" KB\nMin Free Heap: ");
+  message += String(ESP.getMinFreeHeap() / 1024U);
+  message += F(" KB\nLargest Block: ");
+  message += String(ESP.getMaxAllocHeap() / 1024U);
+  message += F(" KB\n\nPerformance\nLast loop: ");
+  message += String(performance.lastLoopMs);
+  message += F(" ms\nMaximum loop: ");
+  message += String(performance.maximumLoopMs);
+  message += F(" ms");
+  return message;
+}
+
+String buildAutoWakeScreen() {
+  String message;
+  message.reserve(420);
+  message += F("Auto Wake\n\n");
+  for (const Target& target : targets) {
+    message += target.config.name;
+    message += F(": ");
+    if (!target.runtime.configured) message += F("Not configured");
+    else message += target.config.autoWake ? F("Enabled") : F("Disabled");
+    message += '\n';
+  }
+  message += F("Delay: ");
+  message += String(AUTO_WAKE_DELAY_SECONDS);
+  message += F(" seconds\n\nLast startup workflow\n");
+  for (const Target& target : targets) {
+    message += target.config.name;
+    message += F(": ");
+    message += autoWakeResultText(target.runtime.autoWakeResult);
+    message += '\n';
+  }
+  return message;
+}
+
+String buildSafeModeScreen() {
+  String message;
+  message.reserve(350);
+  message += F("TeleWOL SAFE MODE\n\nRepeated unhealthy boots were detected.\n\nWi-Fi: ");
+  message += WiFi.status() == WL_CONNECTED ? F("Connected") : F("Disconnected");
+  message += F("\nOTA: ");
+  message += ota.initialized ? F("Ready") : F("Waiting for Wi-Fi");
+  message += F("\nReset reason: ");
+  message += resetReasonText();
+  message += F("\n\nUpload corrected firmware using ArduinoOTA or USB.");
+  return message;
+}
+
+String renderCurrentScreen(uint32_t now) {
+  switch (ui.screen) {
+    case Screen::kTargetStatus: {
+      const Target* target = findTarget(ui.target);
+      return target == nullptr ? String(F("Target not configured."))
+                               : buildTargetStatusScreen(*target, now);
+    }
+    case Screen::kAllStatus: return buildAllStatusScreen(now);
+    case Screen::kEspStatus: return buildEspStatusScreen(now);
+    case Screen::kAutoWake: return buildAutoWakeScreen();
+    case Screen::kActionResult: return ui.actionResult;
+    case Screen::kSafeMode: return buildSafeModeScreen();
+    default: return buildMainDashboard(now);
+  }
+}
+
+const String& keyboardForCurrentScreen() {
+  if (ui.screen == Screen::kMain) return ui.mainKeyboard;
+  if (ui.screen == Screen::kAllStatus) return ui.allStatusKeyboard;
+  if (ui.screen == Screen::kSafeMode) return ui.safeModeKeyboard;
+  if (ui.screen == Screen::kTargetStatus) {
+    const uint8_t index = static_cast<uint8_t>(ui.target);
+    if (index < Limits::kTargetCount) return ui.targetStatusKeyboards[index];
+  }
+  return ui.backKeyboard;
+}
+
+void queueScreen(Screen screen, TargetId target = TargetId::kNone,
+                 bool allowFallback = true) {
+  ui.screen = screen;
+  ui.target = target;
+  ui.updatePending = true;
+  ui.fallbackAllowed = allowFallback;
+}
+
+void showActionResult(const String& text) {
+  ui.actionResult = text;
+  queueScreen(Screen::kActionResult);
+}
+
+void recordTelegramSuccess() {
+  telegram.reachable = true;
+  telegram.backoffActive = false;
+  telegram.failureCount = 0;
+}
+
+void recordTelegramFailure(uint32_t now) {
+  telegram.reachable = false;
+  telegram.backoffActive = true;
+  telegram.lastFailureMs = now;
+  if (telegram.failureCount < UINT8_MAX) ++telegram.failureCount;
+  telegram.retryDelayMs = telegram.failureCount == 1
+                              ? Timing::kTelegramFirstBackoffMs
+                              : Timing::kTelegramContinuedBackoffMs;
+  Serial.printf("Telegram unavailable; retrying in %lu ms\n",
+                static_cast<unsigned long>(telegram.retryDelayMs));
+}
+
+TelegramResult telegramPost(const char* method, JsonObject payload,
+                            const char* timingLabel) {
+  const uint32_t startedMs = millis();
+  const String response = bot.sendPostToTelegram(bot.buildCommand(method), payload);
+  telegramClient.stop();
+  logOperationDuration(timingLabel, startedMs);
+
+  TelegramResult result;
+  if (response.length() == 0) {
+    result.kind = TelegramResultKind::kNetworkError;
+    recordTelegramFailure(millis());
+    return result;
+  }
+
+  telegramResponse.clear();
+  if (deserializeJson(telegramResponse, response)) {
+    result.kind = TelegramResultKind::kParseError;
+    recordTelegramFailure(millis());
+    return result;
+  }
+
+  recordTelegramSuccess();
+  if (telegramResponse["ok"] | false) {
+    result.kind = TelegramResultKind::kSuccess;
+    result.messageId = telegramResponse["result"]["message_id"] | 0;
+    return result;
+  }
+  const String description = telegramResponse["description"].as<String>();
+  result.kind = description.indexOf("message is not modified") >= 0
+                    ? TelegramResultKind::kNotModified
+                    : TelegramResultKind::kApiError;
+  return result;
+}
+
+TelegramResult sendOrEditDashboard(const String& text, const String& keyboard,
+                                   bool editExisting) {
+  telegramPayload.clear();
+  telegramPayload["chat_id"] = telegram.dashboardChatId;
+  telegramPayload["text"] = text;
+  if (editExisting) telegramPayload["message_id"] = telegram.dashboardMessageId;
+  JsonObject replyMarkup = telegramPayload.createNestedObject("reply_markup");
+  replyMarkup["inline_keyboard"] = serialized(keyboard);
+  return telegramPost(editExisting ? "editMessageText" : "sendMessage",
+                      telegramPayload.as<JsonObject>(),
+                      editExisting ? "Edit dashboard" : "Send dashboard");
+}
+
+void saveDashboardIdentity() {
+  preferences.putInt("dashId", telegram.dashboardMessageId);
+  preferences.putString("dashChat", telegram.dashboardChatId);
+}
+
+bool serviceDashboard(uint32_t now) {
+  if (!ui.updatePending || ota.inProgress || !telegram.initialized ||
+      !telegramRequestAllowed(now)) {
+    return false;
+  }
+  if (telegram.dashboardChatId.length() == 0) {
+    telegram.dashboardChatId = TELEGRAM_CHAT_ID;
+  }
+
+  const String text = renderCurrentScreen(now);
+  const String& keyboard = keyboardForCurrentScreen();
+  const bool editExisting = telegram.dashboardMessageId > 0;
+  if (editExisting && text == telegram.lastDashboardText &&
+      keyboard == telegram.lastDashboardKeyboard) {
+    ui.updatePending = false;
+    return false;
+  }
+
+  const TelegramResult result = sendOrEditDashboard(text, keyboard, editExisting);
+  if (result.kind == TelegramResultKind::kSuccess ||
+      result.kind == TelegramResultKind::kNotModified) {
+    if (!editExisting && result.messageId > 0) {
+      telegram.dashboardMessageId = result.messageId;
+      saveDashboardIdentity();
+    }
+    telegram.lastDashboardText = text;
+    telegram.lastDashboardKeyboard = keyboard;
+    ui.updatePending = false;
+  } else if (editExisting && result.kind == TelegramResultKind::kApiError &&
+             ui.fallbackAllowed) {
+    telegram.dashboardMessageId = 0;
+    telegram.lastDashboardText = "";
+    telegram.lastDashboardKeyboard = "";
+    ui.fallbackAllowed = false;
+  } else {
+    ui.updatePending = false;
+  }
+  return true;
+}
+
+void answerCallback(const String& queryId, const char* text = nullptr,
+                    bool showAlert = false) {
+  telegramPayload.clear();
+  telegramPayload["callback_query_id"] = queryId;
+  telegramPayload["show_alert"] = showAlert;
+  telegramPayload["cache_time"] = 0;
+  if (text != nullptr && text[0] != '\0') telegramPayload["text"] = text;
+  telegramPost("answerCallbackQuery", telegramPayload.as<JsonObject>(),
+               "Callback ACK");
+}
+
+void sendOneShotText(const String& chatId, const __FlashStringHelper* text) {
+  telegramPayload.clear();
+  telegramPayload["chat_id"] = chatId;
+  telegramPayload["text"] = text;
+  telegramPost("sendMessage", telegramPayload.as<JsonObject>(), "Telegram send");
+}
+
+String normalizeCommand(String command) {
+  command.trim();
+  const int suffix = command.indexOf('@');
+  if (suffix >= 0) command.remove(suffix);
+  return command;
+}
+
+ParsedAction parseAction(String value, bool callback) {
+  if (!callback) value = normalizeCommand(value);
+  if (value == (callback ? Callback::kMain : Command::kStart) ||
+      (!callback && value == Command::kHelp)) {
+    return {Action::kMain, TargetId::kNone};
+  }
+  if (value == (callback ? Callback::kEspStatus : Command::kEspStatus)) {
+    return {Action::kEspStatus, TargetId::kNone};
+  }
+  if (value == (callback ? Callback::kAutoWake : Command::kAutoWake)) {
+    return {Action::kAutoWake, TargetId::kNone};
+  }
+  if (value == (callback ? Callback::kStatusAll : Command::kStatusAll) ||
+      (callback && value == Callback::kRefreshAll)) {
+    return {Action::kAllStatus, TargetId::kNone};
+  }
+  for (size_t index = 0; index < Limits::kTargetCount; ++index) {
+    const TargetConfig& config = targets[index].config;
+    if (value == (callback ? config.wakeCallback : config.wakeCommand)) {
+      return {Action::kWakeTarget, targetIdAt(index)};
+    }
+    if (value == (callback ? config.statusCallback : config.statusCommand) ||
+        (callback && value == config.refreshCallback)) {
+      return {Action::kTargetStatus, targetIdAt(index)};
+    }
+  }
+  return {Action::kUnknown, TargetId::kNone};
 }
 
 void adoptDashboardMessage(const TelegramUpdate& update) {
   if (update.messageId <= 0) return;
-  if (dashboardMessageId != update.messageId || dashboardChatId != update.chatId) {
-    dashboardMessageId = update.messageId;
-    dashboardChatId = update.chatId;
-    lastDashboardText = "";
-    lastDashboardKeyboard = "";
-    saveDashboardIdentity();
+  if (telegram.dashboardMessageId == update.messageId &&
+      telegram.dashboardChatId == update.chatId) {
+    return;
+  }
+  telegram.dashboardMessageId = update.messageId;
+  telegram.dashboardChatId = update.chatId;
+  telegram.lastDashboardText = "";
+  telegram.lastDashboardKeyboard = "";
+  saveDashboardIdentity();
+}
+
+bool statusRequestAllowed(uint32_t now) {
+  return actions.lastStatusRequestMs == 0 ||
+         now - actions.lastStatusRequestMs >= Timing::kStatusRefreshCooldownMs;
+}
+
+void startStatusJob(const ParsedAction& parsed, uint32_t now) {
+  if (!statusRequestAllowed(now)) {
+    showActionResult(F("Status refresh requested too quickly. Please wait."));
+    return;
+  }
+  actions.lastStatusRequestMs = now;
+  if (parsed.action == Action::kAllStatus) {
+    actions.status.type = StatusJobType::kAll;
+    actions.status.target = TargetId::kNone;
+    actions.status.nextTargetIndex = 0;
+    return;
+  }
+  Target* target = findTarget(parsed.target);
+  if (target == nullptr || !target->runtime.configured) {
+    showActionResult(F("Target is not configured."));
+    return;
+  }
+  actions.status.type = StatusJobType::kTarget;
+  actions.status.target = parsed.target;
+  actions.status.nextTargetIndex = 0;
+}
+
+void startWolJob(TargetId targetId, bool automatic, uint32_t now) {
+  Target* target = findTarget(targetId);
+  if (target == nullptr || !target->runtime.configured) {
+    showActionResult(F("Target is not configured."));
+    return;
+  }
+  if (!automatic && target->runtime.lastWakeMs != 0 &&
+      now - target->runtime.lastWakeMs < Timing::kWolCooldownMs) {
+    showActionResult(F("Wake requested recently. Please wait a moment."));
+    return;
+  }
+  if (!automatic) target->runtime.lastWakeMs = now;
+  actions.wol.active = true;
+  actions.wol.automatic = automatic;
+  actions.wol.anyPacketSent = false;
+  actions.wol.target = targetId;
+  actions.wol.packetsSent = 0;
+  actions.wol.lastSendMs = now;
+}
+
+void dispatchAction(const ParsedAction& parsed, uint32_t now) {
+  switch (parsed.action) {
+    case Action::kMain:
+      queueScreen(Screen::kMain);
+      break;
+    case Action::kEspStatus:
+      queueScreen(health.safeMode ? Screen::kSafeMode : Screen::kEspStatus);
+      break;
+    case Action::kAutoWake:
+      queueScreen(Screen::kAutoWake);
+      break;
+    case Action::kTargetStatus:
+    case Action::kAllStatus:
+      startStatusJob(parsed, now);
+      break;
+    case Action::kWakeTarget:
+      startWolJob(parsed.target, false, now);
+      break;
+    default:
+      showActionResult(F("Unknown command. Use /help to open control panel."));
+      break;
   }
 }
 
-void handleCallbackQuery(const TelegramUpdate& update) {
-  if (!isAuthorized(update.chatId)) {
-    Serial.printf("Unauthorized Telegram callback from chat ID %s\n", update.chatId.c_str());
+void handleCallbackUpdate(const TelegramUpdate& update, uint32_t now) {
+  if (update.chatId != TELEGRAM_CHAT_ID) {
+    Serial.printf("Unauthorized Telegram callback from chat ID %s\n",
+                  update.chatId.c_str());
     answerCallback(update.queryId, "Access denied.", true);
     return;
   }
-
-  if (update.queryId == lastCallbackQueryId) {
+  if (update.queryId == telegram.lastCallbackQueryId) {
     answerCallback(update.queryId, "Already handled.");
     return;
   }
-  lastCallbackQueryId = update.queryId;
-
-  const uint32_t now = millis();
-  if (update.text == lastButtonAction && now - lastButtonAt < BUTTON_DEBOUNCE_MS) {
+  telegram.lastCallbackQueryId = update.queryId;
+  const ParsedAction parsed = parseAction(update.text, true);
+  if (sameAction(parsed, actions.lastButton) && actions.lastButtonMs != 0 &&
+      now - actions.lastButtonMs < Timing::kButtonDebounceMs) {
     answerCallback(update.queryId, "Please wait.");
     return;
   }
-  lastButtonAction = update.text;
-  lastButtonAt = now;
-
-  if (otaInProgress) {
+  actions.lastButton = parsed;
+  actions.lastButtonMs = now;
+  if (ota.inProgress) {
     answerCallback(update.queryId, "OTA update is in progress.");
     return;
   }
-  if (isHeavyAction(update.text) && actionBusy()) {
+  if (isNetworkAction(parsed.action) && actionBusy()) {
     answerCallback(update.queryId, "Another action is running.");
     return;
   }
 
-  // ACK is deliberately the first network operation after authorization checks.
+  // Acknowledge before any ping or WOL work.
   answerCallback(update.queryId);
   adoptDashboardMessage(update);
-  if (safeMode) {
-    queueScreen(UiScreen::kSafeMode);
-  } else if (isHeavyAction(update.text)) {
-    scheduleManualAction(update.text);
-  } else {
-    routeLightAction(update.text);
-  }
+  if (health.safeMode) queueScreen(Screen::kSafeMode);
+  else dispatchAction(parsed, now);
 }
 
-void handleTextCommand(const TelegramUpdate& update) {
-  if (!isAuthorized(update.chatId)) {
-    Serial.printf("Unauthorized Telegram access attempt from chat ID %s\n", update.chatId.c_str());
-    sendOneShotText(update.chatId, "Access denied. This chat is not authorized.");
+void handleCommandUpdate(const TelegramUpdate& update, uint32_t now) {
+  if (update.chatId != TELEGRAM_CHAT_ID) {
+    Serial.printf("Unauthorized Telegram access attempt from chat ID %s\n",
+                  update.chatId.c_str());
+    sendOneShotText(update.chatId, F("Access denied. This chat is not authorized."));
     return;
   }
-
-  dashboardChatId = update.chatId;
-  if (safeMode) {
-    queueScreen(UiScreen::kSafeMode);
+  telegram.dashboardChatId = update.chatId;
+  if (health.safeMode) {
+    queueScreen(Screen::kSafeMode);
     return;
   }
-
-  const String command = normalizeCommand(update.text);
-  if (command == "/start" || command == "/help") {
-    queueScreen(UiScreen::kMain);
-  } else if (command == "/wake_win") {
-    scheduleManualAction("wake_win");
-  } else if (command == "/wake_linux") {
-    scheduleManualAction("wake_linux");
-  } else if (command == "/status_win") {
-    scheduleManualAction("status_win");
-  } else if (command == "/status_linux") {
-    scheduleManualAction("status_linux");
-  } else if (command == "/status_all") {
-    scheduleManualAction("status_all");
-  } else if (command == "/status") {
-    queueScreen(UiScreen::kEspStatus);
-  } else if (command == "/auto_wake") {
-    queueScreen(UiScreen::kAutoWakeStatus);
-  } else {
-    setActionResult("Unknown command. Use /help to open the control panel.");
+  const ParsedAction parsed = parseAction(update.text, false);
+  if (isNetworkAction(parsed.action) && actionBusy()) {
+    showActionResult(F("Another network action is already running. Please wait."));
+    return;
   }
+  dispatchAction(parsed, now);
 }
 
 bool parseTelegramUpdate(const String& response, TelegramUpdate& update) {
+  update.isCallback = false;
+  update.updateId = 0;
+  update.messageId = 0;
+  update.chatId.remove(0);
+  update.text.remove(0);
+  update.queryId.remove(0);
   telegramUpdateDocument.clear();
-  const DeserializationError error = deserializeJson(telegramUpdateDocument, response);
-  if (error || !(telegramUpdateDocument["ok"] | false)) return false;
-
+  if (deserializeJson(telegramUpdateDocument, response) ||
+      !(telegramUpdateDocument["ok"] | false)) {
+    return false;
+  }
   JsonArray results = telegramUpdateDocument["result"].as<JsonArray>();
   if (results.isNull() || results.size() == 0) return true;
+
   JsonObject result = results[0];
   update.updateId = result["update_id"] | 0;
   if (result.containsKey("callback_query")) {
@@ -898,269 +1066,383 @@ bool parseTelegramUpdate(const String& response, TelegramUpdate& update) {
     update.chatId = message["chat"]["id"].as<String>();
     update.text = message["text"].as<String>();
     update.messageId = message["message_id"] | 0;
-  } else {
-    update.updateId = result["update_id"] | 0;
   }
   return true;
 }
 
-bool handleTelegramPoll() {
-  if (!telegramInitialized || otaInProgress) return false;
-  const uint32_t now = millis();
-  if (!timeReached(now, nextTelegramPollAt) ||
-      !timeReached(now, telegramRequestNotBefore)) {
+bool serviceTelegram(uint32_t now) {
+  if (!telegram.initialized || ota.inProgress ||
+      !telegramRequestAllowed(now)) {
     return false;
   }
+  const uint32_t pollInterval = health.safeMode
+                                    ? Timing::kSafeModeTelegramPollMs
+                                    : Timing::kTelegramPollMs;
+  if (telegram.lastPollMs != 0 && now - telegram.lastPollMs < pollInterval) {
+    return false;
+  }
+  telegram.lastPollMs = now;
+  telegram.pollCommand = F("getUpdates?offset=");
+  telegram.pollCommand += String(telegram.lastUpdateId + 1);
+  telegram.pollCommand += F("&limit=1&timeout=0");
 
-  String command;
-  command.reserve(80);
-  command += "getUpdates?offset=";
-  command += String(lastTelegramUpdateId + 1);
-  command += "&limit=1&timeout=0";
-  const uint32_t startedAt = millis();
-  const String response = bot.sendGetToTelegram(bot.buildCommand(command));
-  client.stop();
-  logOperationDuration("Telegram getUpdates", startedAt);
-
+  const uint32_t startedMs = millis();
+  const String response = bot.sendGetToTelegram(bot.buildCommand(telegram.pollCommand));
+  telegramClient.stop();
+  logOperationDuration("Telegram getUpdates", startedMs);
   if (response.length() == 0) {
-    recordTelegramFailure();
+    recordTelegramFailure(millis());
     return true;
   }
 
-  TelegramUpdate update;
-  if (!parseTelegramUpdate(response, update)) {
-    recordTelegramFailure();
+  if (!parseTelegramUpdate(response, telegram.update)) {
+    recordTelegramFailure(millis());
     return true;
   }
   recordTelegramSuccess();
-  nextTelegramPollAt = millis() +
-      (safeMode ? SAFE_MODE_BOT_POLL_INTERVAL_MS : BOT_POLL_INTERVAL_MS);
-
-  if (update.updateId > 0) {
-    if (update.updateId <= lastTelegramUpdateId) return true;
-    lastTelegramUpdateId = update.updateId;
-    recoveryPreferences.putLong("tgUpdate", lastTelegramUpdateId);
-    if (update.isCallback) handleCallbackQuery(update);
-    else if (update.text.length() > 0) handleTextCommand(update);
+  if (telegram.update.updateId <= telegram.lastUpdateId) return true;
+  telegram.lastUpdateId = telegram.update.updateId;
+  preferences.putLong("tgUpdate", telegram.lastUpdateId);
+  const uint32_t dispatchTime = millis();
+  if (telegram.update.isCallback) {
+    handleCallbackUpdate(telegram.update, dispatchTime);
+  } else if (telegram.update.text.length() > 0) {
+    handleCommandUpdate(telegram.update, dispatchTime);
   }
   return true;
 }
 
-void updateTargetStatus(const char* label, const char* ipAddress,
-                        TargetRuntimeStatus& status) {
-  IPAddress target;
-  if (WiFi.status() != WL_CONNECTED || !target.fromString(ipAddress)) {
-    status.state = TargetState::kUnknown;
-    status.responseTimeMs = 0.0F;
-    status.lastCheckMs = millis();
+void performTargetCheck(Target& target, uint32_t now) {
+  if (!target.runtime.configured || WiFi.status() != WL_CONNECTED) {
+    target.runtime.state = target.runtime.configured
+                               ? TargetState::kUnknown
+                               : TargetState::kNotConfigured;
+    target.runtime.responseTimeMs = 0.0F;
+    target.runtime.lastCheckMs = now;
     return;
   }
 
-  const uint32_t startedAt = millis();
+  const uint32_t startedMs = millis();
   float responseTimeMs = 0.0F;
-  const BoundedPingResult result = boundedPing(target, PING_TIMEOUT_MS, responseTimeMs);
-  logOperationDuration(label, startedAt);
-  status.lastCheckMs = millis();
-  status.responseTimeMs = responseTimeMs;
+  const BoundedPingResult result = boundedPing(
+      target.runtime.ip, Timing::kPingTimeoutMs, responseTimeMs);
+  char timingLabel[32];
+  snprintf(timingLabel, sizeof(timingLabel), "Ping %s", target.config.name);
+  logOperationDuration(timingLabel, startedMs);
+
+  target.runtime.lastCheckMs = millis();
+  target.runtime.responseTimeMs = responseTimeMs;
   if (result == BoundedPingResult::kReply) {
-    status.state = TargetState::kOnline;
-    status.lastSuccessfulCheckMs = status.lastCheckMs;
+    target.runtime.state = TargetState::kOnline;
+    target.runtime.lastSuccessfulCheckMs = target.runtime.lastCheckMs;
   } else if (result == BoundedPingResult::kTimeout) {
-    status.state = TargetState::kOffline;
+    target.runtime.state = TargetState::kOffline;
   } else {
-    status.state = TargetState::kUnknown;
+    target.runtime.state = TargetState::kUnknown;
   }
 }
 
-void finishManualWol(bool windowsTarget) {
+bool sendMagicPacket(const Target& target) {
+  if (!target.runtime.configured || WiFi.status() != WL_CONNECTED) return false;
+  uint8_t packet[102];
+  memset(packet, 0xFF, 6);
+  for (uint8_t repeat = 0; repeat < 16; ++repeat) {
+    memcpy(packet + 6 + repeat * 6, target.runtime.mac, 6);
+  }
+  if (!udp.beginPacket(network.broadcast, Limits::kWolPort)) return false;
+  const size_t written = udp.write(packet, sizeof(packet));
+  return written == sizeof(packet) && udp.endPacket() == 1;
+}
+
+void showManualWolResult(const Target& target, bool sent) {
   String message;
   message.reserve(220);
-  message += windowsTarget ? "Wake Windows\n\n" : "Wake Linux\n\n";
-  message += wolAnyPacketSent
-                 ? "Five Wake-on-LAN packets were scheduled and sent."
-                 : "Wake-on-LAN failed: no packet could be sent.";
-  message += windowsTarget
-                 ? "\nUse Status Windows to check whether it comes online."
-                 : "\nUse Status Linux to check whether it comes online.";
-  setActionResult(message);
+  message += F("Wake ");
+  message += target.config.name;
+  message += F("\n\n");
+  message += sent ? F("Five Wake-on-LAN packets were scheduled and sent.")
+                  : F("Wake-on-LAN failed: no packet could be sent.");
+  message += F("\nUse Status ");
+  message += target.config.name;
+  message += F(" to check whether it comes online.");
+  showActionResult(message);
 }
 
-void startNextAutoWakeStep();
-
-void finishAutoWol(bool windowsTarget) {
-  if (windowsTarget) {
-    autoWindowsResult = wolAnyPacketSent ? AutoWakeResult::kWakeSent
-                                         : AutoWakeResult::kWakeFailed;
-  } else {
-    autoLinuxResult = wolAnyPacketSent ? AutoWakeResult::kWakeSent
-                                       : AutoWakeResult::kWakeFailed;
+bool serviceWol(uint32_t now) {
+  if (!actions.wol.active) return false;
+  if (actions.wol.packetsSent > 0 &&
+      now - actions.wol.lastSendMs < Timing::kWolRepeatMs) {
+    return false;
   }
-  pendingAction = PendingAction::kNone;
-  startNextAutoWakeStep();
-}
+  Target* target = findTarget(actions.wol.target);
+  if (target == nullptr) {
+    actions.wol.active = false;
+    return false;
+  }
 
-bool processWolStep(bool windowsTarget, bool automatic) {
-  const uint32_t now = millis();
-  if (!timeReached(now, nextWolPacketAt)) return false;
-  const char* macAddress = windowsTarget ? WINDOWS_MAC : LINUX_MAC;
-  if (sendOneMagicPacket(macAddress)) wolAnyPacketSent = true;
-  ++wolPacketsSent;
-  Serial.printf("WOL %s packet %u/%u: %s\n", windowsTarget ? "Windows" : "Linux",
-                wolPacketsSent, WOL_REPEAT_COUNT,
-                wolAnyPacketSent ? "sent" : "failed");
+  const bool packetSent = sendMagicPacket(*target);
+  actions.wol.anyPacketSent |= packetSent;
+  actions.wol.lastSendMs = now;
+  ++actions.wol.packetsSent;
+  Serial.printf("WOL %s packet %u/%u: %s\n", target->config.name,
+                actions.wol.packetsSent, Limits::kWolPacketCount,
+                packetSent ? "sent" : "failed");
+  if (actions.wol.packetsSent < Limits::kWolPacketCount) return false;
 
-  if (wolPacketsSent < WOL_REPEAT_COUNT) {
-    nextWolPacketAt = now + WOL_REPEAT_INTERVAL_MS;
-  } else if (automatic) {
-    finishAutoWol(windowsTarget);
+  const bool automatic = actions.wol.automatic;
+  const bool anyPacketSent = actions.wol.anyPacketSent;
+  actions.wol.active = false;
+  if (automatic) {
+    target->runtime.autoWakeResult = anyPacketSent
+                                         ? AutoWakeResult::kWakeSent
+                                         : AutoWakeResult::kWakeFailed;
+    ++actions.autoWake.nextTargetIndex;
   } else {
-    pendingAction = PendingAction::kNone;
-    finishManualWol(windowsTarget);
+    showManualWolResult(*target, anyPacketSent);
   }
   return false;
 }
 
-void startNextAutoWakeStep() {
-  if (!autoWakeWorkflowActive) return;
-  if (AUTO_WAKE_WINDOWS && isWindowsConfigured() &&
-      autoWindowsResult == AutoWakeResult::kPending) {
-    pendingAction = PendingAction::kAutoCheckWindows;
-    return;
+bool serviceStatusJob(uint32_t now) {
+  if (actions.status.type == StatusJobType::kNone) return false;
+  if (actions.status.type == StatusJobType::kTarget) {
+    const TargetId targetId = actions.status.target;
+    Target* target = findTarget(targetId);
+    actions.status.type = StatusJobType::kNone;
+    if (target == nullptr) return false;
+    performTargetCheck(*target, now);
+    queueScreen(Screen::kTargetStatus, targetId);
+    return true;
   }
-  if (AUTO_WAKE_LINUX && isLinuxConfigured() &&
-      autoLinuxResult == AutoWakeResult::kPending) {
-    pendingAction = PendingAction::kAutoCheckLinux;
-    return;
-  }
-  autoWakeWorkflowActive = false;
-  pendingAction = PendingAction::kNone;
-  queueScreen(UiScreen::kAutoWakeStatus);
-}
 
-bool handlePendingActionStep() {
-  if (pendingAction == PendingAction::kNone || otaInProgress ||
-      WiFi.status() != WL_CONNECTED) {
+  while (actions.status.nextTargetIndex < Limits::kTargetCount &&
+         !targets[actions.status.nextTargetIndex].runtime.configured) {
+    ++actions.status.nextTargetIndex;
+  }
+  if (actions.status.nextTargetIndex >= Limits::kTargetCount) {
+    actions.status.type = StatusJobType::kNone;
+    queueScreen(Screen::kAllStatus);
     return false;
   }
-
-  switch (pendingAction) {
-    case PendingAction::kCheckWindows:
-      updateTargetStatus("Ping Windows", WINDOWS_IP, windowsStatus);
-      pendingAction = PendingAction::kNone;
-      queueScreen(UiScreen::kWindowsStatus);
-      return true;
-    case PendingAction::kCheckLinux:
-      updateTargetStatus("Ping Linux", LINUX_IP, linuxStatus);
-      pendingAction = PendingAction::kNone;
-      queueScreen(UiScreen::kLinuxStatus);
-      return true;
-    case PendingAction::kCheckAllWindows:
-      updateTargetStatus("Ping Windows", WINDOWS_IP, windowsStatus);
-      pendingAction = isLinuxConfigured() ? PendingAction::kCheckAllLinux
-                                          : PendingAction::kNone;
-      if (pendingAction == PendingAction::kNone) queueScreen(UiScreen::kAllStatus);
-      return true;
-    case PendingAction::kCheckAllLinux:
-      updateTargetStatus("Ping Linux", LINUX_IP, linuxStatus);
-      pendingAction = PendingAction::kNone;
-      queueScreen(UiScreen::kAllStatus);
-      return true;
-    case PendingAction::kWakeWindows:
-      return processWolStep(true, false);
-    case PendingAction::kWakeLinux:
-      return processWolStep(false, false);
-    case PendingAction::kAutoCheckWindows:
-      updateTargetStatus("Ping Windows", WINDOWS_IP, windowsStatus);
-      if (windowsStatus.state == TargetState::kOnline) {
-        autoWindowsResult = AutoWakeResult::kAlreadyOnline;
-        pendingAction = PendingAction::kNone;
-        startNextAutoWakeStep();
-      } else {
-        startWolSequence(PendingAction::kAutoWakeWindows);
-      }
-      return true;
-    case PendingAction::kAutoCheckLinux:
-      updateTargetStatus("Ping Linux", LINUX_IP, linuxStatus);
-      if (linuxStatus.state == TargetState::kOnline) {
-        autoLinuxResult = AutoWakeResult::kAlreadyOnline;
-        pendingAction = PendingAction::kNone;
-        startNextAutoWakeStep();
-      } else {
-        startWolSequence(PendingAction::kAutoWakeLinux);
-      }
-      return true;
-    case PendingAction::kAutoWakeWindows:
-      return processWolStep(true, true);
-    case PendingAction::kAutoWakeLinux:
-      return processWolStep(false, true);
-    default:
-      pendingAction = PendingAction::kNone;
-      return false;
+  Target& target = targets[actions.status.nextTargetIndex++];
+  performTargetCheck(target, now);
+  if (actions.status.nextTargetIndex >= Limits::kTargetCount) {
+    actions.status.type = StatusJobType::kNone;
+    queueScreen(Screen::kAllStatus);
   }
+  return true;
 }
 
-bool isAutoWakeAllowedForReset() {
-  return lastResetReason == ESP_RST_POWERON && !safeMode;
+bool serviceAutoWake(uint32_t now) {
+  if (!actions.autoWake.active || actions.wol.active) return false;
+  while (actions.autoWake.nextTargetIndex < Limits::kTargetCount) {
+    Target& target = targets[actions.autoWake.nextTargetIndex];
+    if (!target.runtime.configured || !target.config.autoWake) {
+      ++actions.autoWake.nextTargetIndex;
+      continue;
+    }
+    performTargetCheck(target, now);
+    if (target.runtime.state == TargetState::kOnline) {
+      target.runtime.autoWakeResult = AutoWakeResult::kAlreadyOnline;
+      ++actions.autoWake.nextTargetIndex;
+    } else {
+      startWolJob(targetIdAt(actions.autoWake.nextTargetIndex), true, now);
+    }
+    return true;
+  }
+  actions.autoWake.active = false;
+  queueScreen(Screen::kAutoWake);
+  return false;
 }
 
-void scheduleAutoWake() {
-  autoWindowsResult = isWindowsConfigured()
-                          ? (AUTO_WAKE_WINDOWS ? AutoWakeResult::kPending
-                                               : AutoWakeResult::kDisabled)
-                          : AutoWakeResult::kNotConfigured;
-  autoLinuxResult = isLinuxConfigured()
-                        ? (AUTO_WAKE_LINUX ? AutoWakeResult::kPending
-                                           : AutoWakeResult::kDisabled)
-                        : AutoWakeResult::kNotConfigured;
-  if (autoWakeHandled || !isAutoWakeAllowedForReset()) {
-    autoWakeHandled = true;
-    if (AUTO_WAKE_WINDOWS && isWindowsConfigured()) {
-      autoWindowsResult = AutoWakeResult::kSkippedReset;
+bool servicePendingAction(uint32_t now) {
+  if (ota.inProgress || WiFi.status() != WL_CONNECTED) return false;
+  if (actions.status.type != StatusJobType::kNone) return serviceStatusJob(now);
+  if (actions.wol.active) return serviceWol(now);
+  if (actions.autoWake.active) return serviceAutoWake(now);
+  return false;
+}
+
+bool autoWakeAllowedForReset() {
+  return health.resetReason == ESP_RST_POWERON && !health.safeMode;
+}
+
+void scheduleAutoWake(uint32_t now) {
+  if (actions.autoWake.handled || !autoWakeAllowedForReset()) {
+    actions.autoWake.handled = true;
+    for (Target& target : targets) {
+      if (target.runtime.configured && target.config.autoWake) {
+        target.runtime.autoWakeResult = AutoWakeResult::kSkippedReset;
+      }
     }
-    if (AUTO_WAKE_LINUX && isLinuxConfigured()) {
-      autoLinuxResult = AutoWakeResult::kSkippedReset;
-    }
-    Serial.println("Auto Wake skipped for this reset reason");
+    Serial.println(F("Auto Wake skipped for this reset reason"));
     return;
   }
-  autoWakePending = true;
-  autoWakeStartedAt = millis();
-}
-
-void handleAutoWakeTimer() {
-  if (!autoWakePending || autoWakeHandled || otaInProgress || actionBusy()) return;
-  if (millis() - autoWakeStartedAt < AUTO_WAKE_DELAY_SECONDS * 1000UL) return;
-
-  autoWakePending = false;
-  autoWakeHandled = true;
-  if ((!AUTO_WAKE_WINDOWS || !isWindowsConfigured()) &&
-      (!AUTO_WAKE_LINUX || !isLinuxConfigured())) {
+  bool hasEnabledTarget = false;
+  for (const Target& target : targets) {
+    hasEnabledTarget |= target.runtime.configured && target.config.autoWake;
+  }
+  if (!hasEnabledTarget) {
+    actions.autoWake.handled = true;
     return;
   }
-  autoWakeWorkflowActive = true;
-  startNextAutoWakeStep();
+  actions.autoWake.pending = true;
+  actions.autoWake.startedMs = now;
+}
+
+void serviceAutoWakeStart(uint32_t now) {
+  if (!actions.autoWake.pending || actions.autoWake.handled || ota.inProgress ||
+      actionBusy()) {
+    return;
+  }
+  if (now - actions.autoWake.startedMs < AUTO_WAKE_DELAY_SECONDS * 1000UL) {
+    return;
+  }
+  actions.autoWake.pending = false;
+  actions.autoWake.handled = true;
+  actions.autoWake.active = true;
+  actions.autoWake.nextTargetIndex = 0;
+}
+
+void configureBroadcastAddress() {
+  const IPAddress local = WiFi.localIP();
+  const IPAddress mask = WiFi.subnetMask();
+  for (uint8_t index = 0; index < 4; ++index) {
+    network.broadcast[index] = local[index] | static_cast<uint8_t>(~mask[index]);
+  }
+  Serial.printf("WOL broadcast address: %s\n",
+                network.broadcast.toString().c_str());
+}
+
+void setupTelegram() {
+  if (telegram.initialized) return;
+  telegramClient.setInsecure();
+  // Arduino-ESP32 2.x setTimeout() uses seconds, not milliseconds.
+  telegramClient.setTimeout(Timing::kTelegramClientTimeoutSeconds);
+  telegramClient.setHandshakeTimeout(Timing::kTelegramHandshakeTimeoutSeconds);
+  bot.longPoll = 0;
+  bot.waitForResponse = Timing::kTelegramResponseWaitMs;
+  bot.maxMessageLength = Limits::kTelegramMessageBytes;
+  telegram.pollCommand.reserve(80);
+  telegram.initialized = true;
+  Serial.println(F("Telegram client ready (bounded TLS timeouts)"));
+}
+
+void setupOTA() {
+  if (ota.initialized) return;
+  ArduinoOTA.setHostname(OTA_HOSTNAME);
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+  ArduinoOTA.onStart([]() {
+    ota.lastProgress = UINT8_MAX;
+    ota.inProgress = true;
+    health.applicationState = ApplicationState::kOtaUpdating;
+    feedWatchdog();
+    Serial.println(F("OTA update starting; network actions paused"));
+  });
+  ArduinoOTA.onEnd([]() {
+    preferences.putUChar("failed", 0);
+    feedWatchdog();
+    Serial.println(F("OTA update complete"));
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    if (total == 0) return;
+    const uint8_t percent = static_cast<uint8_t>((progress * 100U) / total);
+    if (percent == 100 || ota.lastProgress == UINT8_MAX ||
+        percent >= ota.lastProgress + 10) {
+      Serial.printf("OTA Progress: %u%%\n", percent);
+      ota.lastProgress = percent;
+    }
+    feedWatchdog();
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    ota.inProgress = false;
+    health.applicationState = health.safeMode ? ApplicationState::kSafeMode
+                                               : ApplicationState::kOnline;
+    Serial.printf("OTA Error: %u; paused actions may resume\n", error);
+  });
+  ArduinoOTA.begin();
+  ota.initialized = true;
+  Serial.println(F("ArduinoOTA ready"));
+}
+
+void printWiFiDetails() {
+  Serial.println(F("Wi-Fi connected"));
+  Serial.printf("SSID: %s\n", WiFi.SSID().c_str());
+  Serial.printf("IP: %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("RSSI: %d dBm\n", WiFi.RSSI());
+}
+
+void onWiFiConnected(uint32_t now) {
+  printWiFiDetails();
+  configureBroadcastAddress();
+  setupTelegram();
+  setupOTA();
+  if (!network.connectedBefore) {
+    network.connectedBefore = true;
+    scheduleAutoWake(now);
+    queueScreen(health.safeMode ? Screen::kSafeMode : Screen::kMain);
+  } else {
+    queueScreen(ui.screen, ui.target);
+  }
+}
+
+void onWiFiDisconnected() {
+  Serial.println(F("Wi-Fi disconnected"));
+  telegram.reachable = false;
+}
+
+void connectWiFi(uint32_t now) {
+  Serial.println(F("Connecting to Wi-Fi..."));
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  network.lastRetryMs = now;
+}
+
+void serviceWiFi(uint32_t now) {
+  const bool connected = WiFi.status() == WL_CONNECTED;
+  if (connected != network.wasConnected) {
+    network.wasConnected = connected;
+    if (connected) onWiFiConnected(now);
+    else onWiFiDisconnected();
+  }
+  if (connected) {
+    health.applicationState = ota.inProgress
+                                  ? ApplicationState::kOtaUpdating
+                                  : health.safeMode
+                                        ? ApplicationState::kSafeMode
+                                        : ApplicationState::kOnline;
+    return;
+  }
+
+  health.applicationState = health.safeMode ? ApplicationState::kSafeMode
+                                             : ApplicationState::kWaitingForWiFi;
+  if (now - network.lastRetryMs < Timing::kWifiRetryMs) return;
+  Serial.println(F("Retrying Wi-Fi connection..."));
+  WiFi.disconnect();
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  network.lastRetryMs = now;
 }
 
 void setupRecovery() {
-  lastResetReason = esp_reset_reason();
-  Serial.printf("Reset reason: %s\n", getResetReasonText().c_str());
-  recoveryPreferences.begin("recovery", false);
-  uint8_t failedBoots = recoveryPreferences.getUChar("failed", 0);
+  health.resetReason = esp_reset_reason();
+  Serial.printf("Reset reason: %s\n", resetReasonText().c_str());
+  preferences.begin("recovery", false);
+  uint8_t failedBoots = preferences.getUChar("failed", 0);
   if (failedBoots < UINT8_MAX) ++failedBoots;
-  recoveryPreferences.putUChar("failed", failedBoots);
-  safeMode = failedBoots >= SAFE_MODE_FAILURE_THRESHOLD;
-  dashboardMessageId = recoveryPreferences.getInt("dashId", 0);
-  dashboardChatId = recoveryPreferences.getString("dashChat", TELEGRAM_CHAT_ID);
-  lastTelegramUpdateId = recoveryPreferences.getLong("tgUpdate", 0);
-  if (safeMode) {
-    applicationState = ApplicationState::kSafeMode;
-    currentScreen = UiScreen::kSafeMode;
-    Serial.println("SAFE MODE: repeated unhealthy boots detected");
+  preferences.putUChar("failed", failedBoots);
+  health.safeMode = failedBoots >= Limits::kSafeModeBootCount;
+  telegram.dashboardMessageId = preferences.getInt("dashId", 0);
+  telegram.dashboardChatId = preferences.getString("dashChat", TELEGRAM_CHAT_ID);
+  telegram.lastUpdateId = preferences.getLong("tgUpdate", 0);
+  if (health.safeMode) {
+    health.applicationState = ApplicationState::kSafeMode;
+    ui.screen = Screen::kSafeMode;
+    Serial.println(F("SAFE MODE: repeated unhealthy boots detected"));
   }
 }
 
-void setupTaskWatchdog() {
-  const esp_err_t initResult = esp_task_wdt_init(TASK_WATCHDOG_TIMEOUT_SECONDS, true);
+void setupWatchdog() {
+  const esp_err_t initResult =
+      esp_task_wdt_init(Timing::kWatchdogSeconds, true);
   if (initResult != ESP_OK && initResult != ESP_ERR_INVALID_STATE) {
     Serial.printf("Task Watchdog initialization failed: %d\n", initResult);
     return;
@@ -1172,157 +1454,60 @@ void setupTaskWatchdog() {
       return;
     }
   }
-  watchdogEnabled = true;
-  Serial.printf("Task Watchdog enabled: %u seconds\n", TASK_WATCHDOG_TIMEOUT_SECONDS);
+  health.watchdogEnabled = true;
+  Serial.printf("Task Watchdog enabled: %lu seconds\n",
+                static_cast<unsigned long>(Timing::kWatchdogSeconds));
 }
 
-void markBootHealthy() {
-  if (bootMarkedHealthy || safeMode || otaInProgress ||
-      millis() - bootStartedAt < BOOT_HEALTHY_AFTER_MS) return;
-  recoveryPreferences.putUChar("failed", 0);
-  bootMarkedHealthy = true;
-  Serial.println("Boot marked healthy");
-}
-
-void connectWiFi() {
-  Serial.println("Connecting to Wi-Fi...");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  lastWiFiReconnectAttempt = millis();
-}
-
-void setupTelegram() {
-  if (telegramInitialized) return;
-  client.setInsecure();
-  // In Arduino-ESP32 2.x setTimeout() takes seconds, not milliseconds.
-  client.setTimeout(2);
-  client.setHandshakeTimeout(3);
-  bot.longPoll = 0;
-  bot.waitForResponse = 1200;
-  bot.maxMessageLength = 3000;
-  telegramInitialized = true;
-  Serial.println("Telegram client ready (bounded TLS timeouts)");
-}
-
-void setupOTA() {
-  if (otaInitialized) return;
-  ArduinoOTA.setHostname(OTA_HOSTNAME);
-  ArduinoOTA.setPassword(OTA_PASSWORD);
-  ArduinoOTA.onStart([]() {
-    lastOtaProgress = 255;
-    otaInProgress = true;
-    applicationState = ApplicationState::kOtaUpdating;
-    feedTaskWatchdog();
-    Serial.println("OTA update starting; network actions paused");
-  });
-  ArduinoOTA.onEnd([]() {
-    recoveryPreferences.putUChar("failed", 0);
-    feedTaskWatchdog();
-    Serial.println("OTA update complete");
-  });
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    if (total == 0) return;
-    const uint8_t percent = static_cast<uint8_t>((progress * 100U) / total);
-    if (percent == 100 || lastOtaProgress == 255 || percent >= lastOtaProgress + 10) {
-      Serial.printf("OTA Progress: %u%%\n", percent);
-      lastOtaProgress = percent;
-    }
-    feedTaskWatchdog();
-  });
-  ArduinoOTA.onError([](ota_error_t error) {
-    otaInProgress = false;
-    applicationState = safeMode ? ApplicationState::kSafeMode : ApplicationState::kOnline;
-    Serial.printf("OTA Error: %u; paused actions may resume\n", error);
-  });
-  ArduinoOTA.begin();
-  otaInitialized = true;
-  Serial.println("ArduinoOTA ready");
-}
-
-void printWiFiDetails() {
-  Serial.println("Wi-Fi connected");
-  Serial.printf("SSID: %s\n", WiFi.SSID().c_str());
-  Serial.printf("IP: %s\n", WiFi.localIP().toString().c_str());
-  Serial.printf("RSSI: %d dBm\n", WiFi.RSSI());
-}
-
-void handleWiFi() {
-  if (WiFi.status() == WL_CONNECTED) {
-    if (!wifiWasConnected) {
-      printWiFiDetails();
-      configureWolBroadcast();
-      setupTelegram();
-      setupOTA();
-      if (!hasConnectedBefore) {
-        hasConnectedBefore = true;
-        scheduleAutoWake();
-        queueScreen(safeMode ? UiScreen::kSafeMode : UiScreen::kMain);
-      } else {
-        // Reuse the dashboard instead of sending a reconnect notification.
-        queueScreen(currentScreen);
-      }
-    }
-    applicationState = safeMode ? ApplicationState::kSafeMode : ApplicationState::kOnline;
-    wifiWasConnected = true;
+void serviceBootHealth(uint32_t now) {
+  if (health.bootMarkedHealthy || health.safeMode || ota.inProgress ||
+      now - health.bootStartedMs < Timing::kBootHealthyMs) {
     return;
   }
-
-  if (wifiWasConnected) Serial.println("Wi-Fi disconnected");
-  wifiWasConnected = false;
-  telegramReachable = false;
-  applicationState = safeMode ? ApplicationState::kSafeMode
-                              : ApplicationState::kWaitingForWiFi;
-  const uint32_t now = millis();
-  if (now - lastWiFiReconnectAttempt >= WIFI_RECONNECT_INTERVAL_MS) {
-    Serial.println("Retrying Wi-Fi connection...");
-    WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    lastWiFiReconnectAttempt = now;
-  }
+  preferences.putUChar("failed", 0);
+  health.bootMarkedHealthy = true;
+  Serial.println(F("Boot marked healthy"));
 }
 
 void setup() {
   Serial.begin(115200);
   Serial.println();
-  Serial.println("ESP32 Wake-on-LAN Bot starting");
-  bootStartedAt = millis();
+  Serial.println(F("ESP32 Wake-on-LAN Bot starting"));
+  health.bootStartedMs = millis();
   setupRecovery();
-  setupTaskWatchdog();
+  setupWatchdog();
+  initializeTargets();
   buildKeyboardCache();
-  windowsStatus.state = isWindowsConfigured() ? TargetState::kUnknown
-                                               : TargetState::kNotConfigured;
-  linuxStatus.state = isLinuxConfigured() ? TargetState::kUnknown
-                                           : TargetState::kNotConfigured;
 
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
-  connectWiFi();
-  const uint32_t startedAt = millis();
+  connectWiFi(millis());
+  const uint32_t startupStartedMs = millis();
+  // Bounded startup wait gives serial USB uploads immediate connection feedback.
   while (WiFi.status() != WL_CONNECTED &&
-         millis() - startedAt < WIFI_STARTUP_TIMEOUT_MS) {
-    delay(100);
-    feedTaskWatchdog();
+         millis() - startupStartedMs < Timing::kWifiStartupTimeoutMs) {
+    delay(Timing::kStartupPollMs);
+    feedWatchdog();
   }
-  if (WiFi.status() == WL_CONNECTED) printWiFiDetails();
-  else Serial.println("Wi-Fi startup timed out; background recovery remains active.");
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println(F("Wi-Fi startup timed out; background recovery remains active."));
+  }
 }
 
 void loop() {
-  const uint32_t loopStartedAt = millis();
-  handleWiFi();
-
+  const uint32_t now = millis();
+  serviceWiFi(now);
   if (WiFi.status() == WL_CONNECTED) {
     ArduinoOTA.handle();
-    if (!otaInProgress) {
-      handleAutoWakeTimer();
-      const bool actionUsedNetwork = handlePendingActionStep();
-      if (!actionUsedNetwork) {
-        const bool dashboardUsedNetwork = handleDashboardUpdate();
-        if (!dashboardUsedNetwork) handleTelegramPoll();
-      }
-      if (!safeMode) markBootHealthy();
+    if (!ota.inProgress) {
+      serviceAutoWakeStart(now);
+      const bool actionUsedNetwork = servicePendingAction(now);
+      const bool dashboardUsedNetwork =
+          !actionUsedNetwork && serviceDashboard(now);
+      if (!actionUsedNetwork && !dashboardUsedNetwork) serviceTelegram(now);
+      serviceBootHealth(now);
     }
   }
-
-  feedTaskWatchdog();
-  finishLoopTiming(loopStartedAt);
+  feedWatchdog();
+  finishLoopTiming(now);
 }
