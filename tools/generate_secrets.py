@@ -18,6 +18,7 @@ REQUIRED_VARIABLES = (
     "TELEGRAM_CHAT_ID",
     "OTA_HOSTNAME",
     "OTA_PASSWORD",
+    "OTA_PORT",
     "AUTO_WAKE_WINDOWS",
     "AUTO_WAKE_LINUX",
     "AUTO_WAKE_DELAY_SECONDS",
@@ -26,9 +27,21 @@ TARGETS = (
     ("WINDOWS", "Windows"),
     ("LINUX", "Linux"),
 )
+STATIC_NETWORK_VARIABLES = (
+    "ESP_STATIC_IP",
+    "ESP_GATEWAY",
+    "ESP_SUBNET",
+    "ESP_DNS_PRIMARY",
+    "ESP_DNS_SECONDARY",
+)
 HEADER_VARIABLES = (
     "WIFI_SSID",
     "WIFI_PASSWORD",
+    "ESP_STATIC_IP",
+    "ESP_GATEWAY",
+    "ESP_SUBNET",
+    "ESP_DNS_PRIMARY",
+    "ESP_DNS_SECONDARY",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
     "WINDOWS_MAC",
@@ -37,6 +50,7 @@ HEADER_VARIABLES = (
     "LINUX_IP",
     "OTA_HOSTNAME",
     "OTA_PASSWORD",
+    "OTA_PORT",
     "AUTO_WAKE_WINDOWS",
     "AUTO_WAKE_LINUX",
     "AUTO_WAKE_DELAY_SECONDS",
@@ -78,6 +92,41 @@ def validate(values: dict[str, str]) -> None:
     for name in REQUIRED_VARIABLES:
         if not values.get(name):
             raise ValueError(f"Missing required environment variable: {name}")
+
+    for name in STATIC_NETWORK_VARIABLES:
+        values.setdefault(name, "")
+
+    static_ip = values["ESP_STATIC_IP"]
+    static_values = [values[name] for name in STATIC_NETWORK_VARIABLES]
+    if not static_ip and any(static_values[1:]):
+        raise ValueError("ESP_STATIC_IP is required when static network settings are configured.")
+    if static_ip:
+        for name in ("ESP_GATEWAY", "ESP_SUBNET", "ESP_DNS_PRIMARY"):
+            if not values[name]:
+                raise ValueError(f"{name} is required when ESP_STATIC_IP is configured.")
+        try:
+            address = ipaddress.IPv4Address(static_ip)
+            gateway = ipaddress.IPv4Address(values["ESP_GATEWAY"])
+            network = ipaddress.IPv4Network(
+                f"{address}/{values['ESP_SUBNET']}", strict=False
+            )
+            primary_dns = ipaddress.IPv4Address(values["ESP_DNS_PRIMARY"])
+            secondary_dns = (
+                ipaddress.IPv4Address(values["ESP_DNS_SECONDARY"])
+                if values["ESP_DNS_SECONDARY"]
+                else None
+            )
+        except (ipaddress.AddressValueError, ipaddress.NetmaskValueError) as exc:
+            raise ValueError("Invalid ESP32 static IPv4 configuration.") from exc
+        if address in (network.network_address, network.broadcast_address):
+            raise ValueError("ESP_STATIC_IP cannot be the network or broadcast address.")
+        if gateway not in network:
+            raise ValueError("ESP_GATEWAY must be in the ESP_STATIC_IP subnet.")
+        values["ESP_STATIC_IP"] = str(address)
+        values["ESP_GATEWAY"] = str(gateway)
+        values["ESP_SUBNET"] = str(network.netmask)
+        values["ESP_DNS_PRIMARY"] = str(primary_dns)
+        values["ESP_DNS_SECONDARY"] = str(secondary_dns) if secondary_dns else ""
 
     configured_targets: dict[str, bool] = {}
     for prefix, label in TARGETS:
@@ -126,6 +175,14 @@ def validate(values: dict[str, str]) -> None:
         raise ValueError("Invalid AUTO_WAKE_DELAY_SECONDS: expected an integer from 0 to 300")
     values["AUTO_WAKE_DELAY_SECONDS"] = str(delay_seconds)
 
+    try:
+        ota_port = int(values["OTA_PORT"], 10)
+    except ValueError as exc:
+        raise ValueError("Invalid OTA_PORT: expected an integer from 1 to 65535") from exc
+    if not 1 <= ota_port <= 65535:
+        raise ValueError("Invalid OTA_PORT: expected an integer from 1 to 65535")
+    values["OTA_PORT"] = str(ota_port)
+
 
 def c_string(value: str) -> str:
     """Return a C/C++ string literal with backslashes and quotes escaped."""
@@ -144,7 +201,7 @@ def build_header(values: dict[str, str]) -> str:
     for name in HEADER_VARIABLES:
         if name in BOOLEAN_VARIABLES:
             lines.append(f"#define {name} {values[name]}")
-        elif name == "AUTO_WAKE_DELAY_SECONDS":
+        elif name in ("AUTO_WAKE_DELAY_SECONDS", "OTA_PORT"):
             lines.append(f"#define {name} {values[name]}U")
         else:
             lines.append(f"#define {name} {c_string(values[name])}")
@@ -153,7 +210,13 @@ def build_header(values: dict[str, str]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_header_safely(destination: Path, content: str) -> None:
+def write_header_safely(destination: Path, content: str) -> bool:
+    try:
+        if destination.read_text(encoding="utf-8") == content:
+            return False
+    except FileNotFoundError:
+        pass
+
     fd, temporary_name = tempfile.mkstemp(
         prefix=".secrets.", suffix=".tmp", dir=str(destination.parent), text=True
     )
@@ -163,6 +226,7 @@ def write_header_safely(destination: Path, content: str) -> None:
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
         os.replace(temporary_name, destination)
+        return True
     except OSError:
         try:
             os.unlink(temporary_name)
@@ -176,7 +240,9 @@ def main() -> int:
     try:
         values = read_env(project_root / ".env")
         validate(values)
-        write_header_safely(project_root / "include" / "secrets.h", build_header(values))
+        changed = write_header_safely(
+            project_root / "include" / "secrets.h", build_header(values)
+        )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -184,7 +250,7 @@ def main() -> int:
         print("Could not write include/secrets.h.", file=sys.stderr)
         return 1
 
-    print("Generated secrets.h successfully.")
+    print("Generated secrets.h successfully." if changed else "secrets.h is up to date.")
     return 0
 
 

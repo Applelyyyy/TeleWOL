@@ -133,6 +133,7 @@ enum class TelegramResultKind : uint8_t {
 
 struct TargetConfig {
   const char* name;
+  const char* icon;
   const char* macText;
   const char* ipText;
   bool autoWake;
@@ -186,7 +187,13 @@ struct TelegramResult {
 struct NetworkRuntime {
   bool wasConnected = false;
   bool connectedBefore = false;
+  bool staticIpEnabled = false;
   uint32_t lastRetryMs = 0;
+  IPAddress staticIp;
+  IPAddress gateway;
+  IPAddress subnet;
+  IPAddress primaryDns;
+  IPAddress secondaryDns;
   IPAddress broadcast;
 };
 
@@ -274,11 +281,11 @@ struct PerformanceRuntime {
 };
 
 Target targets[Limits::kTargetCount] = {
-    {{"Windows", WINDOWS_MAC, WINDOWS_IP, AUTO_WAKE_WINDOWS,
+    {{"Windows", "🪟", WINDOWS_MAC, WINDOWS_IP, AUTO_WAKE_WINDOWS,
       Callback::kWakeWindows, Callback::kStatusWindows,
       Callback::kRefreshWindows, Command::kWakeWindows,
       Command::kStatusWindows}, {}},
-    {{"Linux", LINUX_MAC, LINUX_IP, AUTO_WAKE_LINUX,
+    {{"Linux", "🐧", LINUX_MAC, LINUX_IP, AUTO_WAKE_LINUX,
       Callback::kWakeLinux, Callback::kStatusLinux,
       Callback::kRefreshLinux, Command::kWakeLinux,
       Command::kStatusLinux}, {}},
@@ -393,6 +400,15 @@ const __FlashStringHelper* targetStateText(TargetState state) {
   }
 }
 
+const __FlashStringHelper* targetStateIcon(TargetState state) {
+  switch (state) {
+    case TargetState::kOnline: return F("🟢");
+    case TargetState::kOffline: return F("🔴");
+    case TargetState::kNotConfigured: return F("⚪");
+    default: return F("🟡");
+  }
+}
+
 const __FlashStringHelper* autoWakeResultText(AutoWakeResult result) {
   switch (result) {
     case AutoWakeResult::kDisabled: return F("Disabled");
@@ -486,6 +502,13 @@ void addKeyboardButton(JsonArray row, const char* text, const char* callback) {
   button["callback_data"] = callback;
 }
 
+void addKeyboardButton(JsonArray row, const String& text, const char* callback) {
+  JsonObject button = row.createNestedObject();
+  // ArduinoJson 6 links const char* values but copies Arduino String values.
+  button["text"] = text;
+  button["callback_data"] = callback;
+}
+
 void buildKeyboardCache() {
   auto buildNavigationKeyboard = [](String& output, const char* primaryLabel,
                                     const char* primaryCallback, bool addBack) {
@@ -495,18 +518,18 @@ void buildKeyboardCache() {
     addKeyboardButton(primaryRow, primaryLabel, primaryCallback);
     if (addBack) {
       JsonArray backRow = keyboard.createNestedArray();
-      addKeyboardButton(backRow, "Back", Callback::kMain);
+      addKeyboardButton(backRow, "⬅️ Back", Callback::kMain);
     }
     output.reserve(192);
     serializeJson(document, output);
   };
-  buildNavigationKeyboard(ui.backKeyboard, "Back", Callback::kMain, false);
-  buildNavigationKeyboard(ui.allStatusKeyboard, "Refresh", Callback::kRefreshAll,
-                          true);
-  buildNavigationKeyboard(ui.safeModeKeyboard, "Refresh", Callback::kEspStatus,
-                          false);
+  buildNavigationKeyboard(ui.backKeyboard, "⬅️ Back", Callback::kMain, false);
+  buildNavigationKeyboard(ui.allStatusKeyboard, "🔄 Refresh",
+                          Callback::kRefreshAll, true);
+  buildNavigationKeyboard(ui.safeModeKeyboard, "🔄 Refresh", Callback::kEspStatus,
+                           false);
 
-  DynamicJsonDocument keyboardDocument(768);
+  DynamicJsonDocument keyboardDocument(1024);
   JsonArray keyboard = keyboardDocument.to<JsonArray>();
   size_t configuredTargetCount = 0;
   for (const Target& target : targets) {
@@ -517,28 +540,28 @@ void buildKeyboardCache() {
     JsonArray statusRow = keyboard.createNestedArray();
     for (const Target& target : targets) {
       if (!target.runtime.configured) continue;
-      String wakeLabel = F("Wake ");
+      String wakeLabel = F("⚡ Wake ");
       wakeLabel += target.config.name;
-      String statusLabel = F("Status ");
+      String statusLabel = F("🔎 Status ");
       statusLabel += target.config.name;
-      addKeyboardButton(wakeRow, wakeLabel.c_str(), target.config.wakeCallback);
-      addKeyboardButton(statusRow, statusLabel.c_str(), target.config.statusCallback);
+      addKeyboardButton(wakeRow, wakeLabel, target.config.wakeCallback);
+      addKeyboardButton(statusRow, statusLabel, target.config.statusCallback);
     }
   }
   if (configuredTargetCount > 1) {
     JsonArray allRow = keyboard.createNestedArray();
-    addKeyboardButton(allRow, "Status All", Callback::kStatusAll);
+    addKeyboardButton(allRow, "🌐 Status All", Callback::kStatusAll);
   }
   JsonArray autoRow = keyboard.createNestedArray();
-  addKeyboardButton(autoRow, "Auto Wake", Callback::kAutoWake);
+  addKeyboardButton(autoRow, "⏱️ Auto Wake", Callback::kAutoWake);
   JsonArray espRow = keyboard.createNestedArray();
-  addKeyboardButton(espRow, "ESP32 Status", Callback::kEspStatus);
-  ui.mainKeyboard.reserve(700);
+  addKeyboardButton(espRow, "⚙️ ESP32 Status", Callback::kEspStatus);
+  ui.mainKeyboard.reserve(900);
   serializeJson(keyboardDocument, ui.mainKeyboard);
 
   for (size_t index = 0; index < Limits::kTargetCount; ++index) {
-    buildNavigationKeyboard(ui.targetStatusKeyboards[index], "Refresh",
-                            targets[index].config.refreshCallback, true);
+    buildNavigationKeyboard(ui.targetStatusKeyboards[index], "🔄 Refresh",
+                             targets[index].config.refreshCallback, true);
   }
 }
 
@@ -552,18 +575,23 @@ uint32_t latestCheckTime() {
 
 String buildMainDashboard(uint32_t now) {
   String message;
-  message.reserve(320);
-  message += F("TeleWOL\n\n");
+  message.reserve(420);
+  message += F("⚡ TeleWOL Control Center\n");
+  message += F("━━━━━━━━━━━━━━━━\n\n");
   for (const Target& target : targets) {
     if (!target.runtime.configured) continue;
+    message += target.config.icon;
+    message += ' ';
     message += target.config.name;
     message += F(": ");
+    message += targetStateIcon(target.runtime.state);
+    message += ' ';
     message += targetStateText(target.runtime.state);
     message += '\n';
   }
-  message += F("\nLast status check: ");
+  message += F("\n🕒 Last check: ");
   message += ageText(latestCheckTime(), now);
-  message += F("\n\nESP32: Online\nWi-Fi: ");
+  message += F("\n\n📡 ESP32: 🟢 Online\n📶 Wi-Fi: ");
   message += String(WiFi.RSSI());
   message += F(" dBm");
   return message;
@@ -571,9 +599,13 @@ String buildMainDashboard(uint32_t now) {
 
 String buildTargetStatusScreen(const Target& target, uint32_t now) {
   String message;
-  message.reserve(280);
+  message.reserve(340);
+  message += target.config.icon;
+  message += ' ';
   message += target.config.name;
-  message += F(" Status\n\nStatus: ");
+  message += F(" Status\n━━━━━━━━━━━━━━━━\n\nState: ");
+  message += targetStateIcon(target.runtime.state);
+  message += ' ';
   message += targetStateText(target.runtime.state);
   if (target.runtime.configured) {
     message += F("\nIP: ");
@@ -597,12 +629,16 @@ String buildTargetStatusScreen(const Target& target, uint32_t now) {
 
 String buildAllStatusScreen(uint32_t now) {
   String message;
-  message.reserve(320);
-  message += F("PC Status\n\n");
+  message.reserve(400);
+  message += F("🌐 Device Status\n━━━━━━━━━━━━━━━━\n\n");
   for (const Target& target : targets) {
     if (!target.runtime.configured) continue;
+    message += target.config.icon;
+    message += ' ';
     message += target.config.name;
     message += F(": ");
+    message += targetStateIcon(target.runtime.state);
+    message += ' ';
     message += targetStateText(target.runtime.state);
     message += '\n';
   }
@@ -614,7 +650,7 @@ String buildAllStatusScreen(uint32_t now) {
 String buildEspStatusScreen(uint32_t now) {
   String message;
   message.reserve(700);
-  message += F("ESP32 Status\n\nState: ");
+  message += F("⚙️ ESP32 Status\n━━━━━━━━━━━━━━━━\n\nState: ");
   message += applicationStateText();
   message += F("\nLast Reset: ");
   message += resetReasonText();
@@ -632,6 +668,8 @@ String buildEspStatusScreen(uint32_t now) {
     message += WiFi.SSID();
     message += F("\nIP: ");
     message += WiFi.localIP().toString();
+    message += F("\nAddress Mode: ");
+    message += network.staticIpEnabled ? F("Static") : F("DHCP");
     message += F("\nRSSI: ");
     message += String(rssi);
     message += F(" dBm (");
@@ -660,7 +698,7 @@ String buildEspStatusScreen(uint32_t now) {
 String buildAutoWakeScreen() {
   String message;
   message.reserve(420);
-  message += F("Auto Wake\n\n");
+  message += F("⏱️ Auto Wake\n━━━━━━━━━━━━━━━━\n\n");
   for (const Target& target : targets) {
     message += target.config.name;
     message += F(": ");
@@ -1332,6 +1370,7 @@ void setupOTA() {
   if (ota.initialized) return;
   ArduinoOTA.setHostname(OTA_HOSTNAME);
   ArduinoOTA.setPassword(OTA_PASSWORD);
+  ArduinoOTA.setPort(OTA_PORT);
   ArduinoOTA.onStart([]() {
     ota.lastProgress = UINT8_MAX;
     ota.inProgress = true;
@@ -1389,6 +1428,31 @@ void onWiFiConnected(uint32_t now) {
 void onWiFiDisconnected() {
   Serial.println(F("Wi-Fi disconnected"));
   telegram.reachable = false;
+}
+
+void configureWiFiAddress() {
+  if (ESP_STATIC_IP[0] == '\0') {
+    Serial.println(F("Wi-Fi address mode: DHCP"));
+    return;
+  }
+
+  const bool valid = network.staticIp.fromString(ESP_STATIC_IP) &&
+                     network.gateway.fromString(ESP_GATEWAY) &&
+                     network.subnet.fromString(ESP_SUBNET) &&
+                     network.primaryDns.fromString(ESP_DNS_PRIMARY) &&
+                     (ESP_DNS_SECONDARY[0] == '\0' ||
+                      network.secondaryDns.fromString(ESP_DNS_SECONDARY));
+  if (!valid) {
+    Serial.println(F("Invalid static Wi-Fi configuration; using DHCP"));
+    return;
+  }
+
+  network.staticIpEnabled =
+      WiFi.config(network.staticIp, network.gateway, network.subnet,
+                  network.primaryDns, network.secondaryDns);
+  Serial.printf("Wi-Fi address mode: %s%s\n",
+                network.staticIpEnabled ? "static " : "DHCP fallback",
+                network.staticIpEnabled ? ESP_STATIC_IP : "");
 }
 
 void connectWiFi(uint32_t now) {
@@ -1480,6 +1544,7 @@ void setup() {
   buildKeyboardCache();
 
   WiFi.mode(WIFI_STA);
+  configureWiFiAddress();
   WiFi.setAutoReconnect(true);
   connectWiFi(millis());
   const uint32_t startupStartedMs = millis();
