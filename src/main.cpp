@@ -10,6 +10,7 @@
 #include <cstring>
 #include <esp_system.h>
 #include <esp_task_wdt.h>
+#include <time.h>
 
 #include "BoundedPing.h"
 
@@ -32,6 +33,7 @@ constexpr uint32_t kTelegramFirstBackoffMs = 2000;
 constexpr uint32_t kTelegramContinuedBackoffMs = 5000;
 constexpr uint32_t kButtonDebounceMs = 300;
 constexpr uint32_t kStatusRefreshCooldownMs = 1000;
+constexpr uint32_t kAutomaticStatusIntervalMs = 10UL * 60UL * 1000UL;
 constexpr uint32_t kWolCooldownMs = 3000;
 constexpr uint32_t kWolRepeatMs = 100;
 constexpr uint32_t kPingTimeoutMs = 600;
@@ -39,10 +41,15 @@ constexpr uint32_t kBootHealthyMs = 60000;
 constexpr uint32_t kSlowLoopMs = 250;
 constexpr uint32_t kSlowOperationMs = 100;
 constexpr uint32_t kWatchdogSeconds = 15;
-constexpr uint32_t kTelegramClientTimeoutSeconds = 2;
-constexpr uint32_t kTelegramHandshakeTimeoutSeconds = 3;
-constexpr uint32_t kTelegramResponseWaitMs = 1200;
+constexpr uint32_t kTelegramClientTimeoutSeconds = 5;
+constexpr uint32_t kTelegramHandshakeTimeoutSeconds = 8;
+constexpr uint32_t kTelegramResponseWaitMs = 2500;
+constexpr uint32_t kTelegramBodyDrainMs = 1000;
+constexpr uint32_t kTelegramBodyQuietMs = 75;
 constexpr uint32_t kStartupPollMs = 100;
+constexpr char kThailandTimezone[] = "ICT-7";
+constexpr char kPrimaryTimeServer[] = "pool.ntp.org";
+constexpr char kSecondaryTimeServer[] = "time.google.com";
 }  // namespace Timing
 
 namespace Limits {
@@ -232,6 +239,7 @@ struct StatusJob {
   StatusJobType type = StatusJobType::kNone;
   TargetId target = TargetId::kNone;
   uint8_t nextTargetIndex = 0;
+  bool automatic = false;
 };
 
 struct WolJob {
@@ -258,6 +266,12 @@ struct ActionRuntime {
   ParsedAction lastButton;
   uint32_t lastButtonMs = 0;
   uint32_t lastStatusRequestMs = 0;
+  uint32_t lastAutomaticStatusMs = 0;
+  bool automaticStatusStarted = false;
+};
+
+struct ClockRuntime {
+  bool configured = false;
 };
 
 struct OtaRuntime {
@@ -306,6 +320,7 @@ ActionRuntime actions;
 OtaRuntime ota;
 HealthRuntime health;
 PerformanceRuntime performance;
+ClockRuntime clockRuntime;
 
 Target* findTarget(TargetId id) {
   const uint8_t index = static_cast<uint8_t>(id);
@@ -437,13 +452,27 @@ String formattedUptime(uint32_t now) {
   return String(buffer);
 }
 
-String ageText(uint32_t timestamp, uint32_t now) {
-  if (timestamp == 0) return F("never");
-  const uint32_t ageSeconds = (now - timestamp) / 1000U;
-  if (ageSeconds < 2) return F("just now");
-  if (ageSeconds < 60) return String(ageSeconds) + F("s ago");
-  if (ageSeconds < 3600) return String(ageSeconds / 60U) + F("m ago");
-  return String(ageSeconds / 3600U) + F("h ago");
+bool thailandTimeForMillis(uint32_t timestampMs, uint32_t nowMs,
+                           char* output, size_t outputSize) {
+  if (timestampMs == 0 || output == nullptr || outputSize == 0) return false;
+  const time_t currentEpoch = time(nullptr);
+  // Reject the unset Unix clock. NTP updates it after Wi-Fi connects.
+  if (currentEpoch < 1704067200) return false;
+  const time_t eventEpoch =
+      currentEpoch - static_cast<time_t>((nowMs - timestampMs) / 1000U);
+  struct tm thailandTime {};
+  if (localtime_r(&eventEpoch, &thailandTime) == nullptr) return false;
+  return strftime(output, outputSize, "%d/%m/%Y %H:%M:%S ICT",
+                  &thailandTime) > 0;
+}
+
+String thailandTimeText(uint32_t timestampMs, uint32_t nowMs) {
+  if (timestampMs == 0) return F("Never");
+  char buffer[32]{};
+  if (!thailandTimeForMillis(timestampMs, nowMs, buffer, sizeof(buffer))) {
+    return F("Waiting for time sync");
+  }
+  return String(buffer);
 }
 
 const __FlashStringHelper* signalQuality(int rssi) {
@@ -590,10 +619,11 @@ String buildMainDashboard(uint32_t now) {
     message += '\n';
   }
   message += F("\n🕒 Last check: ");
-  message += ageText(latestCheckTime(), now);
+  message += thailandTimeText(latestCheckTime(), now);
   message += F("\n\n📡 ESP32: 🟢 Online\n📶 Wi-Fi: ");
   message += String(WiFi.RSSI());
-  message += F(" dBm");
+  message += F(" dBm\n🇹🇭 Updated: ");
+  message += thailandTimeText(now, now);
   return message;
 }
 
@@ -621,9 +651,9 @@ String buildTargetStatusScreen(const Target& target, uint32_t now) {
     message += F("\nCheck could not complete.");
   }
   message += F("\n\nLast check: ");
-  message += ageText(target.runtime.lastCheckMs, now);
+  message += thailandTimeText(target.runtime.lastCheckMs, now);
   message += F("\nLast successful reply: ");
-  message += ageText(target.runtime.lastSuccessfulCheckMs, now);
+  message += thailandTimeText(target.runtime.lastSuccessfulCheckMs, now);
   return message;
 }
 
@@ -643,7 +673,7 @@ String buildAllStatusScreen(uint32_t now) {
     message += '\n';
   }
   message += F("\nLast check: ");
-  message += ageText(latestCheckTime(), now);
+  message += thailandTimeText(latestCheckTime(), now);
   return message;
 }
 
@@ -789,22 +819,76 @@ void recordTelegramFailure(uint32_t now) {
                 static_cast<unsigned long>(telegram.retryDelayMs));
 }
 
+void logTelegramClientError() {
+  char errorText[128]{};
+  const int error = telegramClient.lastError(errorText, sizeof(errorText));
+  // WiFiClientSecure stores the connected socket descriptor here on success.
+  if (error < 0) {
+    Serial.printf("Telegram TLS error %d: %s\n", error, errorText);
+  } else {
+    Serial.println(F("Telegram HTTP response timed out"));
+  }
+}
+
+void finishTelegramResponse(String& response) {
+  // UniversalTelegramBot 1.3.0 can return after reading only the HTTP headers
+  // when Telegram's small JSON body arrives in a separate TLS record.
+  const uint32_t startedMs = millis();
+  uint32_t lastByteMs = startedMs;
+  bool sawBody = response.length() > 0;
+
+  while (millis() - startedMs < Timing::kTelegramBodyDrainMs) {
+    bool readAny = false;
+    while (telegramClient.available()) {
+      const char value = static_cast<char>(telegramClient.read());
+      if (response.length() < static_cast<size_t>(Limits::kTelegramMessageBytes)) {
+        response += value;
+      }
+      readAny = true;
+      sawBody = true;
+    }
+    if (readAny) lastByteMs = millis();
+    if (sawBody && millis() - lastByteMs >= Timing::kTelegramBodyQuietMs) break;
+    if (!telegramClient.connected() && !telegramClient.available()) break;
+    feedWatchdog();
+    delay(1);
+  }
+}
+
+void normalizeTelegramJson(String& response) {
+  // Accept a body that is surrounded by HTTP chunk framing left by the
+  // third-party client. Telegram API replies are always one JSON object.
+  const int firstBrace = response.indexOf('{');
+  const int lastBrace = response.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace >= firstBrace &&
+      (firstBrace != 0 || lastBrace != response.length() - 1)) {
+    response = response.substring(firstBrace, lastBrace + 1);
+  }
+}
+
 TelegramResult telegramPost(const char* method, JsonObject payload,
                             const char* timingLabel) {
   const uint32_t startedMs = millis();
-  const String response = bot.sendPostToTelegram(bot.buildCommand(method), payload);
+  String response = bot.sendPostToTelegram(bot.buildCommand(method), payload);
+  finishTelegramResponse(response);
+  normalizeTelegramJson(response);
   telegramClient.stop();
   logOperationDuration(timingLabel, startedMs);
 
   TelegramResult result;
   if (response.length() == 0) {
     result.kind = TelegramResultKind::kNetworkError;
+    logTelegramClientError();
     recordTelegramFailure(millis());
     return result;
   }
 
   telegramResponse.clear();
-  if (deserializeJson(telegramResponse, response)) {
+  const DeserializationError parseError =
+      deserializeJson(telegramResponse, response);
+  if (parseError) {
+    Serial.printf("Telegram JSON parse failed: %s (%u bytes)\n",
+                  parseError.c_str(), static_cast<unsigned>(response.length()));
     result.kind = TelegramResultKind::kParseError;
     recordTelegramFailure(millis());
     return result;
@@ -963,6 +1047,7 @@ void startStatusJob(const ParsedAction& parsed, uint32_t now) {
     actions.status.type = StatusJobType::kAll;
     actions.status.target = TargetId::kNone;
     actions.status.nextTargetIndex = 0;
+    actions.status.automatic = false;
     return;
   }
   Target* target = findTarget(parsed.target);
@@ -973,6 +1058,33 @@ void startStatusJob(const ParsedAction& parsed, uint32_t now) {
   actions.status.type = StatusJobType::kTarget;
   actions.status.target = parsed.target;
   actions.status.nextTargetIndex = 0;
+  actions.status.automatic = false;
+}
+
+void serviceAutomaticStatus(uint32_t now) {
+  if (health.safeMode || ota.inProgress || WiFi.status() != WL_CONNECTED ||
+      actionBusy()) {
+    return;
+  }
+  if (actions.automaticStatusStarted &&
+      now - actions.lastAutomaticStatusMs <
+          Timing::kAutomaticStatusIntervalMs) {
+    return;
+  }
+
+  bool hasConfiguredTarget = false;
+  for (const Target& target : targets) {
+    hasConfiguredTarget |= target.runtime.configured;
+  }
+  if (!hasConfiguredTarget) return;
+
+  actions.automaticStatusStarted = true;
+  actions.lastAutomaticStatusMs = now;
+  actions.status.type = StatusJobType::kAll;
+  actions.status.target = TargetId::kNone;
+  actions.status.nextTargetIndex = 0;
+  actions.status.automatic = true;
+  Serial.println(F("Automatic 10-minute status check started"));
 }
 
 void startWolJob(TargetId targetId, bool automatic, uint32_t now) {
@@ -1083,8 +1195,15 @@ bool parseTelegramUpdate(const String& response, TelegramUpdate& update) {
   update.text.remove(0);
   update.queryId.remove(0);
   telegramUpdateDocument.clear();
-  if (deserializeJson(telegramUpdateDocument, response) ||
-      !(telegramUpdateDocument["ok"] | false)) {
+  const DeserializationError parseError =
+      deserializeJson(telegramUpdateDocument, response);
+  if (parseError) {
+    Serial.printf("Telegram update parse failed: %s (%u bytes)\n",
+                  parseError.c_str(), static_cast<unsigned>(response.length()));
+    return false;
+  }
+  if (!(telegramUpdateDocument["ok"] | false)) {
+    Serial.println(F("Telegram API returned ok=false for getUpdates"));
     return false;
   }
   JsonArray results = telegramUpdateDocument["result"].as<JsonArray>();
@@ -1125,10 +1244,13 @@ bool serviceTelegram(uint32_t now) {
   telegram.pollCommand += F("&limit=1&timeout=0");
 
   const uint32_t startedMs = millis();
-  const String response = bot.sendGetToTelegram(bot.buildCommand(telegram.pollCommand));
+  String response = bot.sendGetToTelegram(bot.buildCommand(telegram.pollCommand));
+  finishTelegramResponse(response);
+  normalizeTelegramJson(response);
   telegramClient.stop();
   logOperationDuration("Telegram getUpdates", startedMs);
   if (response.length() == 0) {
+    logTelegramClientError();
     recordTelegramFailure(millis());
     return true;
   }
@@ -1241,6 +1363,16 @@ bool serviceWol(uint32_t now) {
   return false;
 }
 
+void finishAllStatusJob() {
+  const bool automatic = actions.status.automatic;
+  actions.status.type = StatusJobType::kNone;
+  actions.status.target = TargetId::kNone;
+  actions.status.nextTargetIndex = 0;
+  actions.status.automatic = false;
+  queueScreen(automatic ? Screen::kMain : Screen::kAllStatus);
+  if (automatic) Serial.println(F("Automatic status check completed"));
+}
+
 bool serviceStatusJob(uint32_t now) {
   if (actions.status.type == StatusJobType::kNone) return false;
   if (actions.status.type == StatusJobType::kTarget) {
@@ -1258,15 +1390,13 @@ bool serviceStatusJob(uint32_t now) {
     ++actions.status.nextTargetIndex;
   }
   if (actions.status.nextTargetIndex >= Limits::kTargetCount) {
-    actions.status.type = StatusJobType::kNone;
-    queueScreen(Screen::kAllStatus);
+    finishAllStatusJob();
     return false;
   }
   Target& target = targets[actions.status.nextTargetIndex++];
   performTargetCheck(target, now);
   if (actions.status.nextTargetIndex >= Limits::kTargetCount) {
-    actions.status.type = StatusJobType::kNone;
-    queueScreen(Screen::kAllStatus);
+    finishAllStatusJob();
   }
   return true;
 }
@@ -1411,9 +1541,18 @@ void printWiFiDetails() {
   Serial.printf("RSSI: %d dBm\n", WiFi.RSSI());
 }
 
+void setupThailandClock() {
+  if (clockRuntime.configured) return;
+  configTzTime(Timing::kThailandTimezone, Timing::kPrimaryTimeServer,
+               Timing::kSecondaryTimeServer);
+  clockRuntime.configured = true;
+  Serial.println(F("Time sync configured: Thailand ICT (UTC+7)"));
+}
+
 void onWiFiConnected(uint32_t now) {
   printWiFiDetails();
   configureBroadcastAddress();
+  setupThailandClock();
   setupTelegram();
   setupOTA();
   if (!network.connectedBefore) {
@@ -1486,12 +1625,30 @@ void serviceWiFi(uint32_t now) {
   network.lastRetryMs = now;
 }
 
+bool isUnhealthyReset(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_PANIC:
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT:
+    case ESP_RST_BROWNOUT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 void setupRecovery() {
   health.resetReason = esp_reset_reason();
   Serial.printf("Reset reason: %s\n", resetReasonText().c_str());
   preferences.begin("recovery", false);
   uint8_t failedBoots = preferences.getUChar("failed", 0);
-  if (failedBoots < UINT8_MAX) ++failedBoots;
+  if (isUnhealthyReset(health.resetReason)) {
+    if (failedBoots < UINT8_MAX) ++failedBoots;
+  } else {
+    // Uploads and normal power cycles must not trigger crash recovery.
+    failedBoots = 0;
+  }
   preferences.putUChar("failed", failedBoots);
   health.safeMode = failedBoots >= Limits::kSafeModeBootCount;
   telegram.dashboardMessageId = preferences.getInt("dashId", 0);
@@ -1566,6 +1723,7 @@ void loop() {
     ArduinoOTA.handle();
     if (!ota.inProgress) {
       serviceAutoWakeStart(now);
+      serviceAutomaticStatus(now);
       const bool actionUsedNetwork = servicePendingAction(now);
       const bool dashboardUsedNetwork =
           !actionUsedNetwork && serviceDashboard(now);
