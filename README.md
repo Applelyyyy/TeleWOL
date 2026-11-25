@@ -19,12 +19,11 @@ TeleWOL is an ESP32 Wake-on-LAN controller operated through Telegram. It can wak
 - Ethernet-connected PC with Wake-on-LAN enabled
 - PlatformIO Core or PlatformIO extension for VS Code
 
-PlatformIO installs these libraries from `platformio.ini`:
+PlatformIO installs this library from `platformio.ini`:
 
-- `UniversalTelegramBot`
 - `ArduinoJson`
 
-Wi-Fi, UDP, ICMP, and ArduinoOTA support comes from ESP32 Arduino framework and project source.
+Wi-Fi, persistent HTTPS (`HTTPClient` + `WiFiClientSecure`), UDP, ICMP, FreeRTOS, and ArduinoOTA support comes from the ESP32 Arduino framework and project source.
 
 ## Setup
 
@@ -74,19 +73,29 @@ Only one target is required. Leave both MAC and IP empty for any unused target. 
 
 ## Telegram Controls
 
-Use `/start` to open the button dashboard.
+Use `/start` to open the unified HTML Control Center card.
 
 | Action | Button / Command |
 | --- | --- |
-| Wake Windows | `Wake Windows` / `/wake_win` |
-| Wake Linux | `Wake Linux` / `/wake_linux` |
-| Windows status | `Status Windows` / `/status_win` |
-| Linux status | `Status Linux` / `/status_linux` |
-| All status | `Status All` / `/status_all` |
-| ESP32 status | `ESP32 Status` / `/status` |
-| Auto Wake status | `Auto Wake` / `/auto_wake` |
+| Wake Windows | `⚡ Wake Windows` / `/wake_win` |
+| Wake Linux | `⚡ Wake Linux` / `/wake_linux` |
+| Wake All | `⚡ Wake All` / `/wake_all` |
+| Refresh Status | `🔄 Refresh Status` / `/status_all`, `/status_win`, `/status_linux` |
+| ESP32 Health | `⚙️ ESP32 Health` / `/esp`, `/status` |
+| Auto Wake status | `⏱ Auto-Wake` / `/auto_wake` |
 
 Unavailable targets do not appear in dashboard. Status uses ICMP ping, so firewall rules can make an online PC appear offline.
+
+Auto Wake is disabled in the example configuration. Keep both `AUTO_WAKE_WINDOWS`
+and `AUTO_WAKE_LINUX` set to `false` to prevent startup wake packets after an
+ESP32 power cycle. Enabling either option explicitly permits that target to wake
+after ESP32 power-on, including when standby USB power returns.
+
+The bot discards queued Telegram updates after startup or a connection failure.
+Send a new command or press the button again once it is connected. Text wake
+commands expire after 60 seconds and require the ESP32 clock to be synchronized.
+An expired wake packet job is cancelled instead of resumed after an outage.
+Status checks every 10 minutes do not schedule Wake-on-LAN packets.
 
 ## OTA Update
 
